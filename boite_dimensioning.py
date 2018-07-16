@@ -99,8 +99,9 @@ class BoiteDimensioning:
         self.dlg.lineEdit_Password.setEchoMode(QLineEdit.Password)
 
         # Connect the button "pushButton_verifier_topologie"
-        Button_verifier_topologie = self.dlg.findChild(QPushButton, "pushButton_verifier_topologie")
-        QObject.connect(Button_verifier_topologie, SIGNAL("clicked()"), self.verify_topology)
+        Button_verification = self.dlg.findChild(QPushButton, "pushButton_verification")
+        QObject.connect(Button_verification, SIGNAL("clicked()"), self.verify_topology)
+
         # Connect the button "pushButton_orientation"
         # Button_orientation = self.dlg.findChild(QPushButton, "pushButton_orientation")
         # QObject.connect(Button_orientation, SIGNAL("clicked()"), self.calcul_orientation)
@@ -345,17 +346,17 @@ class BoiteDimensioning:
                 # Do Something
                 # Enable the Comboboxes and Buttons
 
-                # self.dlg.findChild(QComboBox,"comboBox_suf").setEnabled(True)
-                self.dlg.findChild(QComboBox,"comboBox_cheminement").setEnabled(True)
-                # self.dlg.findChild(QComboBox,"comboBox_noeud").setEnabled(True)
+                self.dlg.findChild(QComboBox,"comboBox_suf").setEnabled(True)
+                self.dlg.findChild(QComboBox,"comboBox_cable").setEnabled(True)
+                self.dlg.findChild(QComboBox,"comboBox_noeud").setEnabled(True)
                 self.dlg.findChild(QComboBox, "comboBox_ebp").setEnabled(True)
-                self.dlg.findChild(QComboBox, "comboBox_sitetech").setEnabled(True)
+                self.dlg.findChild(QComboBox, "comboBox_ptech").setEnabled(True)
                 self.dlg.findChild(QComboBox, "comboBox_zs_refpm").setEnabled(True)
-                self.dlg.findChild(QPushButton, "pushButton_verifier_topologie").setEnabled(True)
+                self.dlg.findChild(QPushButton, "pushButton_verification").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_fibres_utiles").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_dimensions").setEnabled(True)
-                self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_chemin").setEnabled(True)
+                self.dlg.findChild(QPushButton, "pushButton_verify_capacity").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_cable").setEnabled(True)
 
                 # self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_chemin")
@@ -369,9 +370,9 @@ class BoiteDimensioning:
                 self.remplir_menu_deroulant_reference(self.dlg.comboBox_noeud, ("SELECT tablename as table_lise FROM pg_tables WHERE schemaname = '"+self.dlg.Schema_grace.text()+"' ;"), 't_noeud')
                 
                 # 2 - in prod
-                self.remplir_menu_deroulant_reference(self.dlg.comboBox_cheminement, ("SELECT tablename as table_lise FROM pg_tables WHERE schemaname = '"+self.dlg.Schema_prod.text()+"' ;"), 'p_cheminement')
+                self.remplir_menu_deroulant_reference(self.dlg.comboBox_cable, ("SELECT tablename as table_lise FROM pg_tables WHERE schemaname = '"+self.dlg.Schema_prod.text()+"' ;"), 'p_cable')
                 self.remplir_menu_deroulant_reference(self.dlg.comboBox_ebp, ("SELECT tablename as table_lise FROM pg_tables WHERE schemaname = '"+self.dlg.Schema_prod.text()+"' ;"), 'p_ebp')
-                self.remplir_menu_deroulant_reference(self.dlg.comboBox_sitetech, ("SELECT tablename as table_lise FROM pg_tables WHERE schemaname = '"+self.dlg.Schema_prod.text()+"' ;"), 'p_sitetech') 
+                self.remplir_menu_deroulant_reference(self.dlg.comboBox_ptech, ("SELECT tablename as table_lise FROM pg_tables WHERE schemaname = '"+self.dlg.Schema_prod.text()+"' ;"), 'p_ptech') 
                 # self.fenetreMessage(QMessageBox.Warning,"Query for zs_refpm", "SELECT zs_refpm FROM " + self.dlg.Schema_grace.text() + ".t_zsro;")
                 # result = self.executerRequette("SELECT zs_refpm FROM " + self.dlg.Schema_grace.text() + ".t_zsro;", True)
                 # for elm in result:

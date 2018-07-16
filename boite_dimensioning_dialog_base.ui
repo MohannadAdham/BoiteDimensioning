@@ -22,8 +22,8 @@
         <string>Tables :</string>
        </property>
        <layout class="QGridLayout" name="gridLayout_5">
-        <item row="6" column="0">
-         <widget class="QPushButton" name="pushButton_mettre_a_jour_chemin">
+        <item row="5" column="0">
+         <widget class="QPushButton" name="pushButton_verify_capacity">
           <property name="enabled">
            <bool>false</bool>
           </property>
@@ -32,7 +32,7 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0">
+        <item row="3" column="0">
          <widget class="QPushButton" name="pushButton_fibres_utiles">
           <property name="enabled">
            <bool>false</bool>
@@ -133,7 +133,7 @@
           </item>
          </layout>
         </item>
-        <item row="7" column="0">
+        <item row="6" column="0">
          <widget class="QPushButton" name="pushButton_mettre_a_jour_cable">
           <property name="enabled">
            <bool>false</bool>
@@ -143,7 +143,7 @@
           </property>
          </widget>
         </item>
-        <item row="5" column="0">
+        <item row="4" column="0">
          <widget class="QPushButton" name="pushButton_dimensions">
           <property name="enabled">
            <bool>false</bool>
@@ -153,13 +153,23 @@
           </property>
          </widget>
         </item>
-        <item row="3" column="0">
-         <widget class="QPushButton" name="pushButton_verifier_topologie">
+        <item row="1" column="0">
+         <widget class="QPushButton" name="pushButton_verification">
           <property name="enabled">
            <bool>false</bool>
           </property>
           <property name="text">
            <string>Verification</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QPushButton" name="pushButton_orientation">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Calculer l'orientation des cables</string>
           </property>
          </widget>
         </item>
@@ -332,7 +342,7 @@
      </item>
     </layout>
    </item>
-   <item row="1" column="0">
+   <item row="2" column="0">
     <widget class="QDialogButtonBox" name="button_box">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -341,6 +351,9 @@
       <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
      </property>
     </widget>
+   </item>
+   <item row="1" column="0">
+    <widget class="QWidget" name="widget" native="true"/>
    </item>
   </layout>
  </widget>
