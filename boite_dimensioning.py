@@ -106,6 +106,10 @@ class BoiteDimensioning:
         # Button_orientation = self.dlg.findChild(QPushButton, "pushButton_orientation")
         # QObject.connect(Button_orientation, SIGNAL("clicked()"), self.calcul_orientation)
 
+        # Connect the button "pushButton_orientation"
+        # Button_verifier_orientation = self.dlg.findChild(QPushButton, "pushButton_verifier_orientation")  
+        # QObject.connect(Button_orientation, SIGNAL("clicked()"), self.verifier_orientation)
+
         # Connect the button "pushButton_fibres_utiles"
         # Button_fibres_utiles = self.dlg.findChild(QPushButton, "pushButton_fibres_utiles")
         # QObject.connect(Button_fibres_utiles, SIGNAL("clicked()"), self.calcul_fibres_utiles)
@@ -353,7 +357,8 @@ class BoiteDimensioning:
                 self.dlg.findChild(QComboBox, "comboBox_ptech").setEnabled(True)
                 self.dlg.findChild(QComboBox, "comboBox_zs_refpm").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verification").setEnabled(True)
-                self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)
+                self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)  
+                self.dlg.findChild(QPushButton, "pushButton_verifier_orientation").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_fibres_utiles").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_dimensions").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verify_capacity").setEnabled(True)

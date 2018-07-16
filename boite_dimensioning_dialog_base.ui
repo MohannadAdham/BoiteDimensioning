@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>435</width>
-    <height>541</height>
+    <height>557</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -22,17 +22,17 @@
         <string>Tables :</string>
        </property>
        <layout class="QGridLayout" name="gridLayout_5">
-        <item row="5" column="0">
+        <item row="6" column="0">
          <widget class="QPushButton" name="pushButton_verify_capacity">
           <property name="enabled">
            <bool>false</bool>
           </property>
           <property name="text">
-           <string>Verifier la capacité des boites</string>
+           <string>Verifier la capacité des chambres</string>
           </property>
          </widget>
         </item>
-        <item row="3" column="0">
+        <item row="4" column="0">
          <widget class="QPushButton" name="pushButton_fibres_utiles">
           <property name="enabled">
            <bool>false</bool>
@@ -133,7 +133,7 @@
           </item>
          </layout>
         </item>
-        <item row="6" column="0">
+        <item row="7" column="0">
          <widget class="QPushButton" name="pushButton_mettre_a_jour_cable">
           <property name="enabled">
            <bool>false</bool>
@@ -143,13 +143,23 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0">
+        <item row="5" column="0">
          <widget class="QPushButton" name="pushButton_dimensions">
           <property name="enabled">
            <bool>false</bool>
           </property>
           <property name="text">
            <string>Calculer les dimensions des boites</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QPushButton" name="pushButton_orientation">
+          <property name="enabled">
+           <bool>false</bool>
+          </property>
+          <property name="text">
+           <string>Calculer l'orientation des cables</string>
           </property>
          </widget>
         </item>
@@ -163,13 +173,13 @@
           </property>
          </widget>
         </item>
-        <item row="2" column="0">
-         <widget class="QPushButton" name="pushButton_orientation">
+        <item row="3" column="0">
+         <widget class="QPushButton" name="pushButton_verifier_orientation">
           <property name="enabled">
            <bool>false</bool>
           </property>
           <property name="text">
-           <string>Calculer l'orientation des cables</string>
+           <string>Verifier l'orientation des cables</string>
           </property>
          </widget>
         </item>
