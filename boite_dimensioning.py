@@ -100,7 +100,7 @@ class BoiteDimensioning:
 
         # Connect the button "pushButton_verifier_topologie"
         Button_verification = self.dlg.findChild(QPushButton, "pushButton_verification")
-        QObject.connect(Button_verification, SIGNAL("clicked()"), self.verify_topology)
+        QObject.connect(Button_verification, SIGNAL("clicked()"), self.verify)
 
         # Connect the button "pushButton_orientation"
         # Button_orientation = self.dlg.findChild(QPushButton, "pushButton_orientation")
@@ -401,127 +401,197 @@ class BoiteDimensioning:
 
 
 
-    def verify_topology(self):
+    def verify(self):
         # zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
-        self.fenetreMessage(QMessageBox, "Success", "Topology will be verified")
-        query_topo = """DO
-                    $$
-                    DECLARE
-                    this_id bigint;
-                    this_geom geometry;
-                    cluster_id_match integer;
+        self.fenetreMessage(QMessageBox, "Success", "verifications will be performed")
 
-                    id_a bigint;
-                    id_b bigint;
+        query_verify = """
+        -- verifications for t_noeud
 
-                    BEGIN
-                    DROP TABLE IF EXISTS prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """;
-                    CREATE TABLE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ (cluster_id serial, ids bigint[], geom geometry);
-                    CREATE INDEX ON prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ USING GIST(geom);
+        DROP MATERIALIZED VIEW IF EXISTS temp.controle_noeud;
+        CREATE MATERIALIZED VIEW temp.controle_noeud AS
+        SELECT row_number() over (), *
+        FROM (
+        SELECT 'Topologie' ::varchar As type,'Doublon géométrie noeud' ::varchar As intitule, nd_code, nd_comment, geom 
+        FROM gracethd.t_noeud WHERE nd_code IN(SELECT DISTINCT I1.nd_code FROM gracethd.t_noeud I1 
+        WHERE EXISTS (SELECT * FROM gracethd.t_noeud I2 WHERE I1.nd_code <> I2.nd_code AND St_Dwithin(I1.geom,I2.geom,0.0001)))
 
-                    -- Iterate through linestrings, assigning each to a cluster (if there is an intersection)
-                    -- or creating a new cluster (if there is not)
-                    -- We limit the query to only the concerning ZSRO
-                    FOR this_id, this_geom IN (SELECT cm_id, geom FROM prod.p_cheminement WHERE cm_zs_code like '%""" + zs_refpm.split("_")[2] + """%') LOOP
-                      -- Look for an intersecting cluster.  (There may be more than one.)
-                      SELECT cluster_id FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ WHERE ST_Intersects(this_geom, prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """.geom)
-                         LIMIT 1 INTO cluster_id_match;
+        UNION SELECT 'Structure BDD' ::varchar As type,'BAL hors d''une ZPBO' ::varchar As intitule, nd_code, nd_comment, geom 
+        FROM gracethd.t_noeud WHERE nd_code IN (SELECT nd_code FROM gracethd.t_noeud N WHERE nd_r1_code = 'SADN' AND (Select zp_id from prod.p_zpbo WHERE St_Contains(geom,N.geom)) IS NULL)
 
-                      IF cluster_id_match IS NULL THEN
-                         -- Create a new cluster
-                         INSERT INTO prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ (ids, geom) VALUES (ARRAY[this_id], this_geom);
-                      ELSE
-                         -- Append line to existing cluster
-                         UPDATE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ SET geom = ST_Union(this_geom, geom),
-                                              ids = array_prepend(this_id, ids)
-                         WHERE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """.cluster_id = cluster_id_match;
-                      END IF;
-                    END LOOP;
+        UNION SELECT 'Structure BDD' ::varchar As type,'BAL non raccordée à un câble de raccordement' ::varchar As intitule, nd_code, nd_comment, geom 
+        FROM gracethd.t_noeud WHERE nd_code IN (SELECT a.nd_code FROM (SELECT n.nd_code, n.nd_comment, n.geom FROM gracethd.t_noeud n, gracethd.t_suf s 
+        WHERE n.nd_code = s.sf_nd_code GROUP BY n.nd_code HAVING count(s.sf_code) < 4 ORDER BY n.nd_code ) AS A 
+        LEFT JOIN prod.p_cable c ON ST_DWITHIN(a.geom, ST_EndPoint(c.geom), 0.0001) AND c.cb_code = 26 GROUP BY a.nd_code, a.nd_comment, a.geom 
+        HAVING count(c.geom) = 0 ORDER BY nd_code )
 
-                    -- Iterate through the prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """, combining prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ that intersect each other
-                    LOOP
-                        SELECT a.cluster_id, b.cluster_id FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ a, prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ b 
-                         WHERE ST_Intersects(a.geom, b.geom)
-                           AND a.cluster_id < b.cluster_id
-                          INTO id_a, id_b;
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'Pavillon (bal entre 1 et 3) dont le nombre de suf est différent du nombre de raccordements' ::varchar As intitule, nd_code, nd_comment, geom 
+        FROM gracethd.t_noeud WHERE nd_code IN (SELECT A.nd_code FROM 
+        (SELECT n.nd_code, count(s.sf_code) as nb_suf, n.geom FROM gracethd.t_noeud n, gracethd.t_suf s 
+        WHERE n.nd_code = s.sf_nd_code GROUP BY n.nd_code HAVING count(s.sf_code) BETWEEN 1 AND 3 ) AS A 
+        LEFT JOIN prod.p_cable c ON ST_DWITHIN(A.geom, ST_EndPoint(c.geom), 0.0001) 
+        WHERE c.cb_code = 26 GROUP BY A.nd_code, A.nb_suf HAVING count(c.cb_id) <> A.nb_suf)
 
-                        EXIT WHEN id_a IS NULL;
-                        -- Merge cluster A into cluster B
-                        UPDATE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ a SET geom = ST_Union(a.geom, b.geom), ids = array_cat(a.ids, b.ids)
-                          FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ b
-                         WHERE a.cluster_id = id_a AND b.cluster_id = id_b;
+        UNION SELECT 'Structure BDD' ::varchar As type,'Immeuble (BAL >= 4) dont le nombre de câbles = 0 ou > 1' ::varchar As intitule, nd_code, nd_comment, geom 
+        FROM gracethd.t_noeud WHERE nd_code IN (SELECT A.nd_code FROM (SELECT n.nd_code, count(s.sf_code) as nb_suf, n.geom 
+        FROM gracethd.t_noeud n, gracethd.t_suf s WHERE n.nd_code = s.sf_nd_code GROUP BY n.nd_code HAVING count(s.sf_code) >= 4 ) AS A 
+        LEFT JOIN prod.p_cable c ON ST_DWITHIN(A.geom, ST_EndPoint(c.geom), 0.0001) GROUP BY A.nd_code, A.nb_suf HAVING count(c.cb_id) > 1 OR count(c.cb_id) = 0)
 
-                        -- Remove cluster B
-                        DELETE FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ WHERE cluster_id = id_b;
-                    END LOOP;
-                    END;
-                    $$ language plpgsql;"""
-
-        query_topo_new = """DO
-                        $$
-                        DECLARE
-                        this_id bigint;
-                        this_geom geometry;
-                        cluster_id_match integer;
-
-                        id_a bigint;
-                        id_b bigint;
-
-                        BEGIN
-                        DROP TABLE IF EXISTS prod.cm_continuite_""" + zs_refpm.split("_")[2].lower().lower() + """;
-                        CREATE TABLE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ (cluster_id serial, ids bigint[], geom geometry);
-                        CREATE INDEX ON prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ USING GIST(geom);
-
-                        -- Iterate through linestrings, assigning each to a cluster (if there is an intersection)
-                        -- or creating a new cluster (if there is not)
-                        -- We limit the query to only the concerning ZSRO
-                        FOR this_id, this_geom IN (SELECT cm_id, geom FROM prod.p_cheminement WHERE cm_zs_code like '%""" + zs_refpm.split("_")[2].lower() + """%') LOOP
-                          -- Look for an intersecting cluster.  (There may be more than one.)
-                          SELECT cluster_id FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ WHERE ST_Intersects(this_geom, prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """.geom)
-                             LIMIT 1 INTO cluster_id_match;
-
-                          IF cluster_id_match IS NULL THEN
-                             -- Create a new cluster
-                             INSERT INTO prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ (ids, geom) VALUES (ARRAY[this_id], this_geom);
-                          ELSE
-                             -- Append line to existing cluster
-                             UPDATE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ SET geom = ST_Union(this_geom, geom),
-                                                  ids = array_prepend(this_id, ids)
-                             WHERE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """.cluster_id = cluster_id_match;
-                          END IF;
-                        END LOOP;
-
-                        -- Iterate through the prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """, combining prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ that intersect each other
-                        LOOP
-                            SELECT a.cluster_id, b.cluster_id FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ a, prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ b 
-                             WHERE ST_Intersects(a.geom, b.geom)
-                               AND a.cluster_id < b.cluster_id
-                              INTO id_a, id_b;
-
-                            EXIT WHEN id_a IS NULL;
-                            -- Merge cluster A into cluster B
-                            UPDATE prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ a SET geom = ST_Union(a.geom, b.geom), ids = array_cat(a.ids, b.ids)
-                              FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ b
-                             WHERE a.cluster_id = id_a AND b.cluster_id = id_b;
-
-                            -- Remove cluster B
-                            DELETE FROM prod.cm_continuite_""" + zs_refpm.split("_")[2].lower() + """ WHERE cluster_id = id_b;
-                        END LOOP;
-                        END;
-                        $$ language plpgsql;"""
+        UNION SELECT 'Topologie' ::varchar As type,'BAL hors ZSRO' ::varchar As intitule, nd_code, nd_comment, geom 
+        FROM gracethd.t_noeud N where nd_code NOT IN (Select nd_code from gracethd.t_noeud N2, prod.p_zsro S where St_contains(S.geom, N2.geom))
+        ) As tbr;
 
 
-        self.fenetreMessage(QMessageBox, "info", query_topo)
-        self.executerRequette(query_topo, False)
-        self.fenetreMessage(QMessageBox, "Success", "Topology has been verified")
+
+        -- verifications for p_sitetech
+
+        DROP MATERIALIZED VIEW IF EXISTS temp.controle_sitetech;
+        CREATE MATERIALIZED VIEW temp.controle_sitetech AS
+        SELECT row_number() over (), *
+        FROM (
+        SELECT 'Structure BDD' ::varchar As type,'Site technique non raccordé à un cable' ::varchar As intitule, st_id, st_comment, geom FROM prod.p_sitetech WHERE st_id NOT IN(SELECT st_id FROM prod.p_sitetech s INNER JOIN prod.p_cable c ON ST_DWITHIN(s.geom, ST_StartPoint(c.geom), 0.0001) )
+        UNION SELECT 'Topologie' ::varchar As type,'Doublon géométrie site technique' ::varchar As intitule, st_id, st_comment, geom FROM prod.p_sitetech WHERE st_id IN (SELECT DISTINCT I1.st_id FROM prod.p_sitetech I1 WHERE EXISTS (SELECT * FROM prod.p_sitetech I2 WHERE I1.st_id <> I2.st_id AND   St_Dwithin(I1.geom , I2.geom,0.0001)))
+        ) As tbr;
+
+
+
+        -- verifications for p_ebp
+
+        DROP MATERIALIZED VIEW IF EXISTS temp.controle_ebp;
+        CREATE MATERIALIZED VIEW temp.controle_ebp AS
+        SELECT row_number() over (), *
+        FROM (
+        SELECT 'Structure BDD' ::varchar As type,'Boite non associée à un point technique' ::varchar As intitule, bp_id , bp_comment, geom 
+        FROM prod.p_ebp WHERE bp_pt_code IS NULL OR bp_pt_code NOT IN ( SELECT pt_id FROM prod.p_ptech)
+
+        UNION SELECT 'Structure BDD' ::varchar As type,'Boite sans câble raccordé (boite apparaissant dans t_ebp mais pas dans t_cable cb_bp1,cb_bp2)' ::varchar As intitule,  bp_id , bp_comment, geom 
+        FROM prod.p_ebp WHERE bp_id NOT IN (SELECT cb_bp1 FROM prod.p_cable WHERE cb_bp1 IS NOT NULL UNION SELECT cb_bp2 FROM prod.p_cable WHERE cb_bp2 IS NOT NULL )
+
+        UNION SELECT 'Structure BDD' ::varchar As type,'PBO sans ZPBO' ::varchar As intitule, bp_id , bp_comment, geom 
+        FROM prod.p_ebp E WHERE E.bp_typelog = 'PBO' AND (Select zp_id from prod.p_zpbo WHERE St_Contains(geom,E.geom)) IS NULL
+
+        UNION SELECT 'Règle ingenierie' ::varchar As type,'PBO avec cable de capacité superieure ou égale à 288 FO' ::varchar As intitule, bp_id , bp_comment, geom 
+        FROM prod.p_ebp WHERE bp_id IN (SELECT distinct e.bp_id FROM prod.p_cable, prod.p_ebp e where (cb_bp1 = e.bp_id or cb_bp2 = e.bp_id) and (cb_capafo >=288)) AND bp_typelog = 'PBO' 
+
+        UNION SELECT 'Topologie' ::varchar As type,'Doublon géométrie boite' ::varchar As intitule, bp_id , bp_comment, geom 
+        FROM prod.p_ebp I1 WHERE EXISTS (SELECT * FROM prod.p_ebp I2 WHERE I1.bp_id <> I2.bp_id AND St_Dwithin(I1.geom , I2.geom,0.0001))
+
+        UNION SELECT 'Structure BDD' ::varchar As type,'Boitier immeuble sans point technique immeuble' ::varchar As intitule, bp_id , bp_comment, geom 
+        FROM prod.p_ebp WHERE bp_id NOT IN (SELECT bp_id FROM prod.p_ebp E, prod.p_ptech P WHERE E.bp_pttype = 7 AND P.pt_code = 14 AND ST_DWITHIN(E.geom, P.geom,0.0001)) and bp_pttype = 7
+
+        UNION SELECT 'Règle ingenierie' ::varchar As type,'BPE dans zpbo' ::varchar As intitule, bp_id , bp_comment, E.geom 
+        FROM prod.p_ebp E, prod.p_zpbo Z WHERE ST_CONTAINS(Z.geom, E.geom) AND bp_typelog = 'BPE'
+        ) As tbr;
+
+
+        -- verifications for zpbo
+
+        DROP MATERIALIZED VIEW IF EXISTS temp.controle_zpbo;
+        CREATE MATERIALIZED VIEW temp.controle_zpbo AS
+        SELECT row_number() over (), *
+        FROM (
+        SELECT 'Structure BDD' ::varchar As type,'ZPBO sans boitier PBO' ::varchar As intitule, z.zp_id , z.zp_comment, z.geom as geom 
+        FROM prod.p_zpbo Z, prod.p_zsro zs WHERE ST_CONTAINS(zs.geom, z.geom) AND (Select count(bp_id) from prod.p_ebp 
+        WHERE bp_typelog = 'PBO' AND St_Contains(Z.geom, geom)) = 0 
+
+        UNION SELECT 'Topologie' ::varchar As type,'Doublon de géométrie ZPBO' ::varchar As intitule, I1.zp_id , I1.zp_comment, I1.geom as geom 
+        FROM prod.p_zpbo I1, prod.p_zsro zs WHERE EXISTS (SELECT * FROM prod.p_zpbo I2 WHERE I1.zp_id <> I2.zp_id AND I1.geom = I2.geom) 
+
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'ZPBO contenant plus d une BAL dont un immeuble' ::varchar As intitule, c.zp_id, c.zp_comment, c.geom 
+        FROM (SELECT A.nd_code, A.nd_comment, A.pavillon, A.zs_refpm, z.zp_id, z.geom , z.zp_comment 
+        FROM (SELECT n.nd_code, n.nd_comment, count(s.sf_code) as pavillon, z.zs_refpm, n.geom FROM gracethd.t_noeud n, gracethd.t_suf s, prod.p_zsro z 
+        WHERE n.nd_code = s.sf_nd_code AND ST_CONTAINS(z.geom, n.geom) GROUP BY n.nd_code, z.zs_refpm HAVING count(s.sf_code) < 4 ) AS A 
+        LEFT JOIN (SELECT zp_id, geom, zp_comment FROM prod.p_zpbo) AS Z ON ST_CONTAINS(z.geom, a.geom) WHERE z.zp_id IS NOT NULL ) AS C 
+        WHERE EXISTS (SELECT d.nd_code, d.pavillon, d.zs_refpm, d.zp_id FROM (SELECT A.nd_code, A.pavillon, A.zs_refpm, z.zp_id 
+        FROM (SELECT n.nd_code, count(s.sf_code) as pavillon, z.zs_refpm, n.geom FROM gracethd.t_noeud n, gracethd.t_suf s, prod.p_zsro z 
+        WHERE n.nd_code = s.sf_nd_code AND ST_CONTAINS(z.geom, n.geom) GROUP BY n.nd_code, z.zs_refpm HAVING count(s.sf_code) >= 4 ) AS A 
+        LEFT JOIN (SELECT zp_id, geom FROM prod.p_zpbo) AS Z ON ST_CONTAINS(z.geom, a.geom) WHERE z.zp_id IS NOT NULL ) AS D WHERE c.nd_code <> d.nd_code AND c.zp_id = d.zp_id )
+
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'ZPBO contenant une BPE' ::varchar As intitule, z.zp_id, z.zp_comment, z.geom 
+        FROM prod.p_ebp E, prod.p_zpbo Z WHERE ST_CONTAINS(Z.geom, E.geom) AND E.bp_typelog = 'BPE'
+
+        UNION SELECT 'Structure BDD' ::varchar As type,'ZPBO qui a plus d une boite' ::varchar As intitule, z.zp_id, z.zp_comment, z.geom 
+        FROM prod.p_ebp E, prod.p_zpbo Z where z.zp_id IN (SELECT z.zp_id FROM prod.p_zpbo z, prod.p_ebp b WHERE ST_CONTAINS(z.geom, b.geom) GROUP BY z.zp_id HAVING COUNT(b.bp_id) > 1)
+
+        ) As tbr;
+
+
+        -- verifications for p_cable
+
+        DROP MATERIALIZED VIEW IF EXISTS temp.controle_cable;
+        CREATE MATERIALIZED VIEW temp.controle_cable AS
+        SELECT row_number() over (), *
+        FROM (
+        SELECT 'Structure BDD' ::varchar As type,'Câble avec une capacité invalide' ::varchar As intitule, cb_id, cb_comment, geom 
+        FROM prod.p_cable WHERE cb_capafo NOT IN (SELECT DISTINCT rc_capafo::integer FROM gracethd.t_refcable ORDER BY rc_capafo::integer)
+
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'Câble avec capa_fo supérieure ou égale à 288 raccordé sur PBO' ::varchar As intitule, cb_id, cb_comment, c.geom 
+        FROM prod.p_cable c, prod.p_ebp e WHERE c.cb_capafo >=288 AND bp_typelog = 'PBO' AND (St_Dwithin(St_StartPoint(c.geom),e.geom,0.0001) OR St_Dwithin(St_EndPoint(c.geom),e.geom,0.0001))
+
+        UNION (WITH points AS (SELECT geom FROM prod.p_sitetech UNION ALL SELECT geom FROM prod.p_ebp) SELECT 'Structure BDD' ::varchar As type,
+        'Câble sans site technique ou boite en extrémité (vérification géométrique)' ::varchar As intitule, cb_id, cb_comment, c.geom  
+        FROM prod.p_cable c LEFT JOIN prod.c_cable ca ON ca.code = c.cb_code LEFT JOIN points  p ON ST_DWITHIN(St_StartPoint(c.geom), p.geom, 0.0001) 
+        LEFT JOIN points p2 ON ST_DWITHIN(St_EndPoint(c.geom), p2.geom, 0.0001) WHERE (p.geom IS NULL OR p2.geom IS NULL) and cb_code <> 26)
+
+        UNION SELECT 'Topologie' ::varchar As type,'Doublons géométrie câble (sans les câbles de racco)' ::varchar As intitule, cb_id, cb_comment, geom  
+        FROM prod.p_cable I1 WHERE EXISTS (SELECT * FROM prod.p_cable I2 WHERE I1.cb_id <> I2.cb_id AND ST_Equals(I1.geom, I2.geom) AND cb_code <> 26) 
+
+        UNION SELECT 'Topologie' ::varchar As type,'Géométrie non valide du câble' ::varchar As intitule, cb_id, cb_comment, geom  
+        FROM prod.p_cable WHERE ST_IsValid(geom) IS NULL
+
+        UNION SELECT 'Topologie' ::varchar As type,'Raccordement qui ne part pas d une boîte ou qui n arrive pas sur un noeud' ::varchar As intitule, cb_id, cb_comment, c.geom  
+        FROM prod.p_cable c LEFT JOIN prod.p_ebp e ON ST_DWITHIN(St_StartPoint(c.geom), e.geom, 0.0001) LEFT JOIN gracethd.t_noeud n ON ST_DWITHIN(ST_EndPoint(c.geom), n.geom, 0.0001)  
+        WHERE cb_code = 26 AND (e.bp_id IS NULL OR n.nd_code IS NULL)
+
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'Raccordement sur BPE (vérification géométrique)' ::varchar As intitule, cb_id, 
+        Case When EXISTS (select cb_id from prod.p_cable where cb_comment = 'BAGUETTE' and St_Intersects (geom,c.geom)) then 'Baguette' Else cb_comment End As cb_comment,c.geom 
+        FROM prod.p_cable c LEFT JOIN prod.p_ebp e ON ST_DWITHIN(St_StartPoint(c.geom), e.geom, 0.0001) LEFT JOIN gracethd.t_noeud n ON ST_DWITHIN(ST_EndPoint(c.geom), n.geom, 0.0001) 
+        WHERE cb_code = 26 AND e.bp_typelog = 'BPE'
+
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'Raccordement sur BPE (vérification attributaire)' ::varchar As intitule, cb_id, cb_comment, geom 
+        FROM prod.p_cable WHERE cb_id IN (select cb_id from prod.p_cable where cb_code = 26 and cb_bp1 IN (Select bp_id from prod.p_ebp where bp_typelog = 'BPE'))
+
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'Raccordement connecté à une mauvaise boîte' ::varchar As intitule, c.cb_id, c.cb_comment, c.geom 
+        FROM prod.p_cable c LEFT JOIN prod.p_ltech l ON c.cb_lt_code = l.lt_id LEFT JOIN prod.p_ebp d ON c.cb_bp1 = d.bp_id LEFT JOIN (SELECT n.nd_code, e.bp_id , e.bp_typelog, n.geom 
+        FROM gracethd.t_noeud n LEFT JOIN prod.p_zpbo z ON ST_CONTAINS(z.geom, n.geom) LEFT JOIN prod.p_ebp e ON ST_CONTAINS(z.geom, e.geom) 
+        WHERE e.bp_typelog = 'PBO' AND n.nd_r1_code = 'SADN') as B ON ST_DWITHIN(ST_EndPoint(c.geom), b.geom, 0.0001) WHERE c.cb_code = 26 AND c.cb_bp1 <> b.bp_id
+
+        UNION SELECT 'Règle ingénierie' ::varchar As type,'Raccordement dont le type logique n est pas raccordement' ::varchar As intitule, cb_id, cb_comment, geom  
+        FROM prod.p_cable WHERE cb_code = 26 AND (cb_typelog IS NULL OR cb_typelog <> 'RA')
+        ) As tbr;
+
+        """
+
+        self.fenetreMessage(QMessageBox, "info", "verification will be executed")
+
         try:
-            self.add_pg_layer("prod", "cm_continuite_" + zs_refpm.split("_")[2].lower())
+            self.executerRequette(query_verify, False)
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
-            # self.fenetreMessage(QMessageBox, "Success", "The topology verification layer wasn't added to the map")
-        # self.fenetreMessage(QMessageBox, "Success", "The topology verification layer is added to the map")
+
+
+
+        self.fenetreMessage(QMessageBox, "Success", "verification is done!")
+
+        # try:
+        #     self.add_pg_layer("prod", "cm_continuite_" + zs_refpm.split("_")[2].lower())
+        # except Exception as e:
+        #     self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+
+
+        try:
+            self.add_pg_layer("temp", "controle_noeud")
+            self.add_pg_layer("temp", "controle_sitetech")
+            self.add_pg_layer("temp", "controle_ebp")
+            self.add_pg_layer("temp", "controle_zpbo")
+            self.add_pg_layer("temp", "controle_cable")
+
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+
+
 
 
 
@@ -553,6 +623,23 @@ class BoiteDimensioning:
 
         else :
             self.fenetreMessage(QMessageBox, "Success", "Layer %s already exists but it has been updated" % vlayer.name())
+
+
+
+
+
+    def calcul_orientation_cable(self):
+        pass
+
+
+    def verify_orientation_cable(self):
+        pass
+
+
+    def calcul_fibres_utiles(self):
+        pass
+
+
 
 
 
