@@ -605,6 +605,19 @@ class BoiteDimensioning:
             self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
 
 
+        table_names = ['controle_noeud', 'controle_cable', 'controle_ebp', 'controle_zpbo', 'controle_sitetech'  ]
+
+        for table_name in table_names:
+            the_query = 'SELECT * FROM temp.' + table_name + '_' + zs_refpm.split("_")[2].lower()
+            result = self.executerRequette(the_query, True)
+            if result is None:
+                pass
+
+            elif len(result) >= 1:
+                self.fenetreMessage(QMessageBox.Warning,"Warning", "Consultz la table : " + table_name + '_' + zs_refpm.split("_")[2].lower())
+
+
+
 
 
 
@@ -642,7 +655,16 @@ class BoiteDimensioning:
 
 
     def calcul_orientation_cable(self):
-        pass
+        query_orientation = """
+
+        """
+
+        try:
+            self.executerRequette(query_orientation, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+
+
 
 
     def verify_orientation_cable(self):
