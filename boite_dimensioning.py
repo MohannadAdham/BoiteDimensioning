@@ -410,9 +410,9 @@ class BoiteDimensioning:
         query_verify = """
         -- verifications for t_noeud
 
-        DROP MATERIALIZED VIEW IF EXISTS temp.controle_noeud;
-        CREATE MATERIALIZED VIEW temp.controle_noeud AS
-        SELECT row_number() over (), *
+        DROP TABLE IF EXISTS temp.controle_noeud_""" +  zs_refpm.split("_")[2] + """;
+        CREATE TABLE temp.controle_noeud_""" +  zs_refpm.split("_")[2] + """ AS
+        SELECT row_number() over () id, *
         FROM (
         SELECT 'Topologie' ::varchar As type,'Doublon géométrie noeud' ::varchar As intitule, nd_code, nd_comment, geom 
         FROM gracethd.t_noeud WHERE nd_code IN(SELECT DISTINCT I1.nd_code FROM gracethd.t_noeud I1 
@@ -441,30 +441,38 @@ class BoiteDimensioning:
 
         UNION SELECT 'Topologie' ::varchar As type,'BAL hors ZSRO' ::varchar As intitule, nd_code, nd_comment, geom 
         FROM gracethd.t_noeud N where nd_code NOT IN (Select nd_code from gracethd.t_noeud N2, prod.p_zsro S where St_contains(S.geom, N2.geom))
-        ) As tbr;
+        ) As tbr
+        WHERE ST_Intersects(tbr.geom, (SELECT geom FROM prod.p_zsro WHERE zs_refpm = '""" +  zs_refpm + """'));
 
 
 
         -- verifications for p_sitetech
 
-        DROP MATERIALIZED VIEW IF EXISTS temp.controle_sitetech;
-        CREATE MATERIALIZED VIEW temp.controle_sitetech AS
-        SELECT row_number() over (), *
+        DROP TABLE IF EXISTS temp.controle_sitetech_""" +  zs_refpm.split("_")[2] + """;
+        CREATE TABLE temp.controle_sitetech_""" +  zs_refpm.split("_")[2] + """ AS
+        SELECT row_number() over () id, *
         FROM (
-        SELECT 'Structure BDD' ::varchar As type,'Site technique non raccordé à un cable' ::varchar As intitule, st_id, st_comment, geom FROM prod.p_sitetech WHERE st_id NOT IN(SELECT st_id FROM prod.p_sitetech s INNER JOIN prod.p_cable c ON ST_DWITHIN(s.geom, ST_StartPoint(c.geom), 0.0001) )
-        UNION SELECT 'Topologie' ::varchar As type,'Doublon géométrie site technique' ::varchar As intitule, st_id, st_comment, geom FROM prod.p_sitetech WHERE st_id IN (SELECT DISTINCT I1.st_id FROM prod.p_sitetech I1 WHERE EXISTS (SELECT * FROM prod.p_sitetech I2 WHERE I1.st_id <> I2.st_id AND   St_Dwithin(I1.geom , I2.geom,0.0001)))
-        ) As tbr;
+        SELECT 'Structure BDD' ::varchar As type,'Site technique non raccordé à un cable' ::varchar As intitule, st_id, st_comment, geom FROM prod.p_sitetech WHERE st_id NOT IN(SELECT st_id 
+        FROM prod.p_sitetech s INNER JOIN prod.p_cable c ON ST_DWITHIN(s.geom, ST_StartPoint(c.geom), 0.0001) )
+
+        UNION SELECT 'Topologie' ::varchar As type,'Doublon géométrie site technique' ::varchar As intitule, st_id, st_comment, geom 
+        FROM prod.p_sitetech WHERE st_id IN (SELECT DISTINCT I1.st_id FROM prod.p_sitetech I1 WHERE EXISTS (SELECT * FROM prod.p_sitetech I2 
+        WHERE I1.st_id <> I2.st_id AND   St_Dwithin(I1.geom , I2.geom,0.0001)))
+        ) As tbr
+        WHERE tbr.st_id in (select st_id FROM prod.p_sitetech join prod.p_ltech on st_id = lt_st_code join prod.p_zsro on lt_id = zs_lt_code where zs_refpm = '""" +  zs_refpm.split("_")[2] + """');
 
 
 
         -- verifications for p_ebp
 
-        DROP MATERIALIZED VIEW IF EXISTS temp.controle_ebp;
-        CREATE MATERIALIZED VIEW temp.controle_ebp AS
-        SELECT row_number() over (), *
+        DROP TABLE IF EXISTS temp.controle_ebp_""" +  zs_refpm.split("_")[2] + """;
+        CREATE TABLE temp.controle_ebp_""" +  zs_refpm.split("_")[2] + """ AS
+        SELECT row_number() over () id, *
         FROM (
+        -- Note: Exclude les bagguette
         SELECT 'Structure BDD' ::varchar As type,'Boite non associée à un point technique' ::varchar As intitule, bp_id , bp_comment, geom 
         FROM prod.p_ebp WHERE bp_pt_code IS NULL OR bp_pt_code NOT IN ( SELECT pt_id FROM prod.p_ptech)
+
 
         UNION SELECT 'Structure BDD' ::varchar As type,'Boite sans câble raccordé (boite apparaissant dans t_ebp mais pas dans t_cable cb_bp1,cb_bp2)' ::varchar As intitule,  bp_id , bp_comment, geom 
         FROM prod.p_ebp WHERE bp_id NOT IN (SELECT cb_bp1 FROM prod.p_cable WHERE cb_bp1 IS NOT NULL UNION SELECT cb_bp2 FROM prod.p_cable WHERE cb_bp2 IS NOT NULL )
@@ -483,16 +491,17 @@ class BoiteDimensioning:
 
         UNION SELECT 'Règle ingenierie' ::varchar As type,'BPE dans zpbo' ::varchar As intitule, bp_id , bp_comment, E.geom 
         FROM prod.p_ebp E, prod.p_zpbo Z WHERE ST_CONTAINS(Z.geom, E.geom) AND bp_typelog = 'BPE'
-        ) As tbr;
+        ) As tbr
+        WHERE ST_Intersects(tbr.geom, (SELECT geom FROM prod.p_zsro WHERE zs_refpm = '""" +  zs_refpm + """'));
 
 
         -- verifications for zpbo
 
-        DROP MATERIALIZED VIEW IF EXISTS temp.controle_zpbo;
-        CREATE MATERIALIZED VIEW temp.controle_zpbo AS
-        SELECT row_number() over (), *
+        DROP TABLE IF EXISTS temp.controle_zpbo_""" +  zs_refpm.split("_")[2] + """;
+        CREATE TABLE temp.controle_zpbo_""" +  zs_refpm.split("_")[2] + """ AS
+        SELECT row_number() over () id, *
         FROM (
-        SELECT 'Structure BDD' ::varchar As type,'ZPBO sans boitier PBO' ::varchar As intitule, z.zp_id , z.zp_comment, z.geom as geom 
+        SELECT 'Structure BDD' ::varchar As type,'ZPBO sans boitier PBO' ::varchar As intitule, z.zp_id AS zp_id, z.zp_comment, z.geom as geom 
         FROM prod.p_zpbo Z, prod.p_zsro zs WHERE ST_CONTAINS(zs.geom, z.geom) AND (Select count(bp_id) from prod.p_ebp 
         WHERE bp_typelog = 'PBO' AND St_Contains(Z.geom, geom)) = 0 
 
@@ -515,14 +524,15 @@ class BoiteDimensioning:
         UNION SELECT 'Structure BDD' ::varchar As type,'ZPBO qui a plus d une boite' ::varchar As intitule, z.zp_id, z.zp_comment, z.geom 
         FROM prod.p_ebp E, prod.p_zpbo Z where z.zp_id IN (SELECT z.zp_id FROM prod.p_zpbo z, prod.p_ebp b WHERE ST_CONTAINS(z.geom, b.geom) GROUP BY z.zp_id HAVING COUNT(b.bp_id) > 1)
 
-        ) As tbr;
+        ) As tbr
+        WHERE tbr.zp_id in ( SELECT zp_id FROM prod.p_zpbo JOIN prod.p_zsro ON zp_zs_code = zs_id WHERE zs_refpm = '""" +  zs_refpm.split("_")[2] + """');
 
 
         -- verifications for p_cable
 
-        DROP MATERIALIZED VIEW IF EXISTS temp.controle_cable;
-        CREATE MATERIALIZED VIEW temp.controle_cable AS
-        SELECT row_number() over (), *
+        DROP TABLE IF EXISTS temp.controle_cable_""" +  zs_refpm.split("_")[2] + """;
+        CREATE TABLE temp.controle_cable_""" +  zs_refpm.split("_")[2] + """ AS
+        SELECT row_number() over () id, *
         FROM (
         SELECT 'Structure BDD' ::varchar As type,'Câble avec une capacité invalide' ::varchar As intitule, cb_id, cb_comment, geom 
         FROM prod.p_cable WHERE cb_capafo NOT IN (SELECT DISTINCT rc_capafo::integer FROM gracethd.t_refcable ORDER BY rc_capafo::integer)
@@ -560,9 +570,12 @@ class BoiteDimensioning:
 
         UNION SELECT 'Règle ingénierie' ::varchar As type,'Raccordement dont le type logique n est pas raccordement' ::varchar As intitule, cb_id, cb_comment, geom  
         FROM prod.p_cable WHERE cb_code = 26 AND (cb_typelog IS NULL OR cb_typelog <> 'RA')
-        ) As tbr;
+        ) As tbr
+        WHERE tbr.cb_id in (SELECT cb_id FROM prod.p_cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code)
+        ;
 
         """
+
 
         self.fenetreMessage(QMessageBox, "info", "verification will be executed")
 
@@ -582,11 +595,11 @@ class BoiteDimensioning:
 
 
         try:
-            self.add_pg_layer("temp", "controle_noeud")
-            self.add_pg_layer("temp", "controle_sitetech")
-            self.add_pg_layer("temp", "controle_ebp")
-            self.add_pg_layer("temp", "controle_zpbo")
-            self.add_pg_layer("temp", "controle_cable")
+            self.add_pg_layer("temp", "controle_noeud_" +  zs_refpm.split("_")[2].lower())
+            self.add_pg_layer("temp", "controle_sitetech_" +  zs_refpm.split("_")[2].lower())
+            self.add_pg_layer("temp", "controle_ebp_" +  zs_refpm.split("_")[2].lower())
+            self.add_pg_layer("temp", "controle_zpbo_" +  zs_refpm.split("_")[2].lower())
+            self.add_pg_layer("temp", "controle_cable_" +  zs_refpm.split("_")[2].lower())
 
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
