@@ -103,8 +103,8 @@ class BoiteDimensioning:
         QObject.connect(Button_verification, SIGNAL("clicked()"), self.verify)
 
         # Connect the button "pushButton_orientation"
-        # Button_orientation = self.dlg.findChild(QPushButton, "pushButton_orientation")
-        # QObject.connect(Button_orientation, SIGNAL("clicked()"), self.calcul_orientation)
+        Button_orientation = self.dlg.findChild(QPushButton, "pushButton_orientation")
+        QObject.connect(Button_orientation, SIGNAL("clicked()"), self.calcul_orientation_cable)
 
         # Connect the button "pushButton_orientation"
         # Button_verifier_orientation = self.dlg.findChild(QPushButton, "pushButton_verifier_orientation")  
@@ -571,7 +571,8 @@ class BoiteDimensioning:
         UNION SELECT 'Règle ingénierie' ::varchar As type,'Raccordement dont le type logique n est pas raccordement' ::varchar As intitule, cb_id, cb_comment, geom  
         FROM prod.p_cable WHERE cb_code = 26 AND (cb_typelog IS NULL OR cb_typelog <> 'RA')
         ) As tbr
-        WHERE tbr.cb_id in (SELECT cb_id FROM prod.p_cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code)
+        WHERE tbr.cb_id in (SELECT cb_id FROM prod.p_cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code 
+        WHERE zs_refpm = """ +  zs_refpm + """)
         ;
 
         """
@@ -652,17 +653,196 @@ class BoiteDimensioning:
 
 
 
+    def create_temp_cable_table(self, zs_refpm):
+        self.fenetreMessage(QMessageBox, "info", "within create_temp_cable_table")
 
-
-    def calcul_orientation_cable(self):
-        query_orientation = """
+        query = """ DROP TABLE IF EXISTS temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """;
+                CREATE TABLE temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ 
+                as (SELECT cable.* FROM prod.p_cable as cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code WHERE zs_refpm = '""" + zs_refpm + """');
 
         """
 
         try:
-            self.executerRequette(query_orientation, False)
+            self.executerRequette(query, False)
+
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+            self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
+
+
+
+
+
+    def calcul_orientation_cable(self):
+
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
+
+        self.fenetreMessage(QMessageBox, "info", "before create_temp_cable_table")
+        
+
+        self.create_temp_cable_table(zs_refpm)
+
+        self.create_cable_cluster(zs_refpm)
+
+
+
+        query_orientation = """
+
+        """
+
+        # try:
+        #     self.executerRequette(query_orientation, False)
+        # except Exception as e:
+        #     self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+
+
+
+    def create_cable_cluster(self, zs_refpm):
+
+        self.fenetreMessage(QMessageBox, "info", "within create_cable_cluster")
+
+        query_cluster = """
+
+                        DO
+                        $$
+                        DECLARE
+                        id record ;
+                        nro record ;
+                        counter integer = 1 ;
+                        counter2 integer = 1 ;
+
+
+                        BEGIN
+
+                            DROP TABLE IF EXISTS temp.cb_cluster_""" + zs_refpm.split("_")[2] + """;
+                            CREATE TABLE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ (gid serial, this_id integer, cb_code integer,  cb_lt_code integer, cb_r3_code varchar, rang integer, 
+                            hierarchie varchar, passage integer, etiquette varchar(254), geom Geometry(Linestring,2154));    
+                            CREATE INDEX cb_cluster_""" + zs_refpm.split("_")[2] + """_geom_gist ON temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ USING GIST (geom); 
+                            
+                            FOR nro IN (SELECT c.cb_id, c.cb_code,c.cb_lt_code, c.geom, s.st_nom FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ c, prod.p_sitetech s 
+                            WHERE ST_INTERSECTS(c.geom, s.geom) AND st_id = 2 AND c.cb_lt_code = 4 ) 
+                            LOOP -- Vérifier site technique
+                            
+                            INSERT INTO temp.cb_cluster_""" + zs_refpm.split("_")[2] + """(this_id, cb_code, cb_lt_code, cb_r3_code, rang, hierarchie, geom)   
+                            SELECT nro.cb_id, nro.cb_code, nro.cb_lt_code, nro.st_nom, counter, CONCAT(counter, '.',counter2), nro.geom;
+
+                            counter2 = counter2 + 1;
+
+                            END LOOP;
+
+                            FOR id IN (SELECT cb_id FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ WHERE cb_code <> 26)
+
+                            LOOP
+                            
+                            counter = counter + 1;
+                            
+                            INSERT INTO temp.cb_cluster_""" + zs_refpm.split("_")[2] + """(this_id, cb_code, cb_lt_code, cb_r3_code, rang, hierarchie, passage, geom)
+                            SELECT c.cb_id, c.cb_code, l. cb_lt_code, l. cb_r3_code, counter, CONCAT(counter,'.',
+                            ROW_NUMBER() OVER(PARTITION BY l.hierarchie ORDER BY ST_X(ST_EndPoint(ST_INTERSECTION(ST_BUFFER(ST_STARTPOINT(c.geom), 1), c.geom)))),'.', l.hierarchie) as hierarchie, 
+                                CASE WHEN ST_Touches(c.geom, St_EndPoint(l.geom)) AND c.cb_code = l.cb_code AND l.passage IS NULL THEN l.this_id 
+                                     WHEN ST_Touches(c.geom, St_EndPoint(l.geom)) AND c.cb_code = l.cb_code AND l.passage IS NOT NULL THEN l.passage END as test, c.geom
+                            FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ c, temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ l
+                            WHERE l.rang = (counter - 1) AND St_Touches(c.geom, St_EndPoint(l.geom)) AND c.cb_id NOT IN (SELECT this_id FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """) 
+                            AND c.cb_code <> 26 
+                            ORDER BY ST_X(ST_EndPoint(ST_INTERSECTION(ST_BUFFER(ST_STARTPOINT(c.geom), 1), c.geom)));
+
+                            
+                            END LOOP;
+
+                            DELETE FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ WHERE gid IN (
+                                            SELECT gid--, this_id, quantite
+                                            FROM (
+                                                SELECT gid, this_id, ROW_NUMBER() OVER(PARTITION BY this_id ORDER BY this_id) as quantite
+                                                FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                                                WHERE this_id IN (SELECT this_id FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ GROUP BY this_id HAVING count(this_id) > 1)
+                                                ) AS A 
+                                            WHERE quantite > 1
+                                            ORDER BY this_id
+                                            );
+
+                            UPDATE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                            SET passage = A.this_id
+                            FROM (
+                                SELECT this_id, cb_code, geom
+                                FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ WHERE this_id IN (SELECT passage FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """) AND passage IS NULL 
+                                ) AS A
+                            WHERE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """.this_id = A.this_id;
+
+                            UPDATE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                            SET passage = NULL
+                            WHERE this_id IN (
+                                        SELECT this_id--, rang, hierarchie, passage
+                                        FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c, prod.p_ebp e
+                                        WHERE ST_DWITHIN(St_EndPoint(c.geom), e.geom, 0.0001) AND passage IS NOT NULL AND e.bp_pttype = 7
+                                        );
+
+                            UPDATE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                            SET passage = NULL
+                            WHERE passage IN (
+                                        SELECT passage--, count(passage)
+                                        FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                                        WHERE passage IS NOT NULL
+                                        GROUP BY passage
+                                        HAVING count(passage) = 1
+                                    );
+
+                            UPDATE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                            SET passage = A.this_id
+                            FROM (
+                                SELECT this_id, cb_code--, geom
+                                FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ WHERE passage IS NULL 
+                                ) AS A
+                            WHERE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """.this_id = A.this_id;
+
+
+                            /*UPDATE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                            SET etiquette = B.etiquette
+                            FROM ( 
+
+                                SELECT *, CONCAT(nom, insee, '_', quadri, '_', (plage + taux), partie) as etiquette
+                                FROM (
+                                    SELECT c1.this_id, c1.cb_code, c1.cb_lt_code, c1.cb_r3_code, c1.rang, c1.hierarchie, c1.passage as id_passage, c2.rang as rang_passage, c2.hierarchie as ordre_passage,
+                                        CASE WHEN c1.this_id IN (SELECT this_id FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c, 
+                                        prod.p_ebp e WHERE ST_DWITHIN(St_EndPoint(c.geom), e.geom, 0.0001) AND passage IS NOT NULL AND e.bp_pttype = 7) THEN 'CFI'
+                                             ELSE 'CDI' END as nom,
+                                        (SELECT LEFT(c.insee, 2) FROM cadastre.communes c, prod.p_sitetech s WHERE ST_CONTAINS(c.geom, s.geom) AND st_id = 2) as insee, c3.quadri, -- Vérifier SRO
+                                        4000 + DENSE_RANK () OVER (PARTITION BY RIGHT(c2.hierarchie, 3) ORDER BY c2.rang, c1.passage, LEFT(c2.hierarchie, 50) ) as plage, 
+                                        CASE WHEN RIGHT(c1.hierarchie, 3) LIKE '1.1' THEN 100 ELSE 200 END as taux,
+                                        CASE WHEN c2.passage IN ( SELECT passage FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ GROUP BY passage HAVING count(passage) > 1 ) THEN
+                                         CONCAT('-', ROW_NUMBER() OVER(PARTITION BY c2.passage ORDER BY RIGHT(c2.hierarchie, 3),  c2.rang, LEFT(c2.hierarchie, 50), RIGHT(c1.hierarchie, 3),  c1.rang, LEFT(c1.hierarchie, 50) ))
+                                             ELSE NULL END as partie
+                                    FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c1
+                                    LEFT JOIN temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c2 ON c2.this_id = c1.passage
+                                    LEFT JOIN (SELECT SUBSTRING(b.ba_etiquet, 11,4)::varchar as quadri, c4.hierarchie FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ ca , temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c4, prod.p_baie b WHERE b.ba_id = ca.cb_ba1 AND c4.this_id = ca.cb_id AND ca.cb_ba1 IS NOT NULL) c3 ON c3.hierarchie = RIGHT(c1.hierarchie, 3)
+                                    ORDER BY RIGHT(c2.hierarchie, 3),  c2.rang, LEFT(c2.hierarchie, 50), RIGHT(c1.hierarchie, 3),  c1.rang, LEFT(c1.hierarchie, 50) 
+                                    ) AS A
+                                ) AS B
+                            WHERE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """.this_id = B.this_id;
+
+
+                            UPDATE temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """
+                            SET cb_etiquet = B.etiquette,
+                                cb_lt_code = B.cb_lt_code,
+                                cb_r3_code = B.cb_r3_code
+                            FROM (
+                                SELECT * 
+                                FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
+                                 ) as B
+                            WHERE temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """.cb_id = b.this_id;*/
+                            
+                        END;
+                        $$ language plpgsql;
+        
+
+        """
+
+
+        # try:
+        #     self.executerRequette(query_cluster, False)
+        #     self.fenetreMessage(QMessageBox, "info", "The table cb_cluster is created")
+
+
+        # except Exception as e:
+        #     self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
 
 
 
