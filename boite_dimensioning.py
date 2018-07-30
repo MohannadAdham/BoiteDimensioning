@@ -459,7 +459,7 @@ class BoiteDimensioning:
         FROM prod.p_sitetech WHERE st_id IN (SELECT DISTINCT I1.st_id FROM prod.p_sitetech I1 WHERE EXISTS (SELECT * FROM prod.p_sitetech I2 
         WHERE I1.st_id <> I2.st_id AND   St_Dwithin(I1.geom , I2.geom,0.0001)))
         ) As tbr
-        WHERE tbr.st_id in (select st_id FROM prod.p_sitetech join prod.p_ltech on st_id = lt_st_code join prod.p_zsro on lt_id = zs_lt_code where zs_refpm = '""" +  zs_refpm.split("_")[2] + """');
+        WHERE tbr.st_id in (select st_id FROM prod.p_sitetech join prod.p_ltech on st_id = lt_st_code join prod.p_zsro on lt_id = zs_lt_code where zs_refpm = '""" +  zs_refpm + """');
 
 
 
@@ -525,7 +525,7 @@ class BoiteDimensioning:
         FROM prod.p_ebp E, prod.p_zpbo Z where z.zp_id IN (SELECT z.zp_id FROM prod.p_zpbo z, prod.p_ebp b WHERE ST_CONTAINS(z.geom, b.geom) GROUP BY z.zp_id HAVING COUNT(b.bp_id) > 1)
 
         ) As tbr
-        WHERE tbr.zp_id in ( SELECT zp_id FROM prod.p_zpbo JOIN prod.p_zsro ON zp_zs_code = zs_id WHERE zs_refpm = '""" +  zs_refpm.split("_")[2] + """');
+        WHERE tbr.zp_id in ( SELECT zp_id FROM prod.p_zpbo JOIN prod.p_zsro ON zp_zs_code = zs_id WHERE zs_refpm = '""" +  zs_refpm + """');
 
 
         -- verifications for p_cable
@@ -572,7 +572,7 @@ class BoiteDimensioning:
         FROM prod.p_cable WHERE cb_code = 26 AND (cb_typelog IS NULL OR cb_typelog <> 'RA')
         ) As tbr
         WHERE tbr.cb_id in (SELECT cb_id FROM prod.p_cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code 
-        WHERE zs_refpm = """ +  zs_refpm + """)
+        WHERE zs_refpm = '""" +  zs_refpm + """')
         ;
 
         """
@@ -609,6 +609,18 @@ class BoiteDimensioning:
         table_names = ['controle_noeud', 'controle_cable', 'controle_ebp', 'controle_zpbo', 'controle_sitetech'  ]
 
         for table_name in table_names:
+            # ------------- style the control layers --------------
+            try:
+                # get the layer
+                layer = QgsMapLayerRegistry.instance().mapLayersByName(table_name + '_' + zs_refpm.split("_")[2].lower())[0]
+                self.add_style(layer)
+
+            except Exception as e:
+                self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+
+            #------------------------------------------------------
+
+            # verify if the control tables have records and notify the user
             the_query = 'SELECT * FROM temp.' + table_name + '_' + zs_refpm.split("_")[2].lower()
             result = self.executerRequette(the_query, True)
             if result is None:
@@ -619,6 +631,73 @@ class BoiteDimensioning:
 
 
 
+
+
+    def add_style(self, layer):
+        from random import randrange
+        # self.fenetreMessage(QMessageBox, 'info', 'within add style for layer ' + layer.name())
+
+        # Get the active layer (must be a vector layer)
+        # layer = qgis.utils.iface.activeLayer()
+
+        # get unique values 
+        fni = layer.fieldNameIndex('intitule')
+        unique_values = layer.dataProvider().uniqueValues(fni)
+
+        # define categories
+        categories = []
+        for unique_value in unique_values:
+            # initialize the default symbol for this geometry type
+            symbol = QgsSymbolV2.defaultSymbol(layer.geometryType())
+
+            # configure a symbol layer
+            layer_style = {}
+            layer_style['color'] = '%d, %d, %d' % (randrange(0,256), randrange(0,256), randrange(0,256))
+
+            if layer.wkbType()==QGis.WKBPoint:
+                # print 'Layer is a pojnt layer'
+                layer_style['color'] = '%d, %d, %d' % (randrange(0,256), randrange(0,256), randrange(0,256))
+                layer_style['size'] = '2'
+                symbol_layer = QgsSimpleMarkerSymbolLayerV2.create(layer_style)
+                symbol_layer.setOutlineWidth(0)
+
+
+            if layer.wkbType()==QGis.WKBLineString:
+                # print 'Layer is a line layer'
+                layer_style['width_border'] = '0.46'
+                layer_style['size'] = '0.46'
+                # layer_style['color_border'] = 'red'
+                symbol_layer = QgsSimpleFillSymbolLayerV2.create(layer_style)
+
+
+            if layer.wkbType()==QGis.WKBPolygon or layer.wkbType()==QGis.WKBMultiPolygon:
+                # print 'Layer is a polygon layer'
+                layer_style['width_border'] = '0.46'
+                layer_style['color_border'] = 'black'
+                symbol_layer = QgsSimpleFillSymbolLayerV2.create(layer_style)
+
+
+
+            symbol_layer = QgsSimpleFillSymbolLayerV2.create(layer_style)
+
+            # replace default symbol layer with the configured one
+            if symbol_layer is not None:
+                symbol.changeSymbolLayer(0, symbol_layer)
+
+            # create renderer object
+            category = QgsRendererCategoryV2(unique_value, symbol, str(unique_value))
+            # entry for the list of category items
+            categories.append(category)
+
+        # create renderer object
+        renderer = QgsCategorizedSymbolRendererV2('intitule', categories)
+
+        # assign the created renderer to the layer
+        if renderer is not None:
+            layer.setRendererV2(renderer)
+
+        # layer.rendererChanged.connect(self.changed_renderer)
+        layer.triggerRepaint()
 
 
 
