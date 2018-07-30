@@ -357,7 +357,7 @@ class BoiteDimensioning:
                 self.dlg.findChild(QComboBox, "comboBox_ptech").setEnabled(True)
                 self.dlg.findChild(QComboBox, "comboBox_zs_refpm").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verification").setEnabled(True)
-                self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)  
+                # self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)  
                 self.dlg.findChild(QPushButton, "pushButton_verifier_orientation").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_fibres_utiles").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_dimensions").setEnabled(True)
@@ -760,7 +760,7 @@ class BoiteDimensioning:
 
         self.create_temp_cable_table(zs_refpm)
 
-        self.create_cable_cluster(zs_refpm)
+        # self.create_cable_cluster(zs_refpm)
 
 
 
