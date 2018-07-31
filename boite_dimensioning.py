@@ -909,13 +909,13 @@ class BoiteDimensioning:
         """
 
 
-        # try:
-        #     self.executerRequette(query_cluster, False)
-        #     self.fenetreMessage(QMessageBox, "info", "The table cb_cluster is created")
+        try:
+            self.executerRequette(query_cluster, False)
+            self.fenetreMessage(QMessageBox, "info", "The table cb_cluster is created")
 
 
-        # except Exception as e:
-        #     self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
 
 
 
@@ -956,6 +956,9 @@ class BoiteDimensioning:
                 CREATE TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ 
                 as (SELECT cable.* FROM prod.p_cable as cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code WHERE zs_refpm = '""" + zs_refpm + """');
 
+                -- Add a column that will hold the values of fb_util
+                ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ ADD COLUMN cb_fo_util integer;
+
         """
 
         try:
@@ -967,14 +970,127 @@ class BoiteDimensioning:
 
     def calcul_fibres_utiles(self):
 
-        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()        
         self.create_temp_cable_table(zs_refpm)
-        self.add_pg_layer("temp", "cable_pour_boite_" +  zs_refpm.split("_")[2].lower())
+        
+        # create cable cluster to use it in the calculation of fb_util
+        try:
+            self.create_cable_cluster(zs_refpm)
+
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
+
+
+        self.add_pg_layer("temp", "cb_cluster_" + zs_refpm.split("_")[2].lower())
+
+        # create the query that calculate fb_util
         
         query = """
+                DO
+                $$
+                DECLARE
+                counter integer = 1 ;
+                rang_fibre integer;
+                id record ;
+                id2 record ;
+                sro text ;
+                base text;
+                typelog text = 'PBO';
+
+                BEGIN
+
+
+                sro = '""" + zs_refpm.split("_")[2] + """'; ---entrez le SRO
+
+
+                EXECUTE 'DROP TABLE IF EXISTS temp.p_cable_' || sro;
+                EXECUTE 'CREATE TABLE temp.p_cable_' || sro || '(gid serial, rang integer, this_id integer, fo_util integer, reserve integer, geom Geometry(Linestring,2154))';
+                ALTER TABLE temp.p_cable_""" + zs_refpm.split("_")[2] + """ ADD PRIMARY KEY (gid);
+                CREATE INDEX ON temp.p_cable_""" + zs_refpm.split("_")[2] + """ USING GIST(geom); 
+                EXECUTE 'INSERT INTO temp.p_cable_' || sro || '(this_id, rang, geom) SELECT this_id, rang, geom from temp.cb_cluster_' || sro;
+
+                --------------------------------------------------------------------------------------
+
+                EXECUTE ' UPDATE temp.p_cable_' || sro || '
+                     SET fo_util = B.nbfibre,
+                     reserve = B.reserve
+                     FROM (
+                        SELECT c.cb_id as this_id, bp.zp_nbfibre as nbfibre, bp.zp_reserve as reserve
+                        FROM temp.cable_pour_boite_""" +  zs_refpm.split("_")[2] + """ c 
+
+                     LEFT JOIN (
+                                SELECT bp_id, zp_id, zp_nbfibre, zp_reserve, prod.p_ebp.geom
+                                FROM prod.p_ebp
+                                join prod.p_zpbo on bp_id = zp_bp_code
+                                where bp_typelog = '' || typelog || ''
+                     ) as bp
+
+                     ON ST_DWithin(St_EndPoint(c.geom), bp.geom, 0.0001)
+                     WHERE bp.zp_nbfibre IS NOT NULL
+                     ) AS B
+                     WHERE temp.p_cable_' || sro || '.this_id = B.this_id';
+
+
+                -------------------------------- New part developped by Kevin ---------------------------
+
+
+                /*EXECUTE ' UPDATE temp.p_cable_' || sro || '
+                        SET fo_util = A.zd_fo_util,
+                            reserve = A.reserve  --------- new 2 --------
+
+                        FROM (
+                            SELECT f.this_id, zd_fo_util, 
+                            (SUM(f2.reserve) + (Case when z.zd_fo_util IS NOT NULL then z.zd_fo_util else 0 End)) as reserve ------------------- new 3 -----------------------
+                            FROM temp.p_cable_' || sro || ' f
+                            LEFT JOIN temp.p_cable_' || sro || ' f2 ON ST_DWITHIN(ST_EndPoint(f.geom), ST_StartPoint(f2.geom), 0.0001)
+                            LEFT JOIN prod.p_ebp e ON ST_DWITHIN(ST_EndPoint(f.geom), e.geom, 0.0001)
+                            LEFT JOIN prod.p_zdep z ON e.bp_id = z.zd_r6_code
+                            WHERE f2.this_id IS NULL AND e.bp_id IS NOT NULL AND e.bp_pttype <> 7
+                            GROUP BY f.this_id, f.rang, z.zd_fo_util
+                            ORDER BY f.this_id
+                            ) AS A
+                        WHERE temp.p_cable_' || sro || '.this_id = A.this_id';*/
+
+
+                --------------------------------------------------------------------------------------------
+
+
+                DROP TABLE IF EXISTS temp.p_cable_tbr;
+                CREATE TABLE temp.p_cable_tbr (gid serial, rang integer, this_id integer, fo_util integer, reserve integer, geom Geometry(Linestring,2154));
+                EXECUTE 'INSERT INTO temp.p_cable_tbr SELECT * FROM temp.p_cable_' || sro; 
+
+                    For id in (Select gid from temp.p_cable_tbr WHERE fo_util IS NULL order by rang DESC) loop
+                    
+                     EXECUTE 'UPDATE temp.p_cable_' || sro || ' c SET fo_util = (Select (SUM(c2.fo_util) + (Case when (Select SUM(z.zd_fo_util)
+                     FROM prod.p_ebp e LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) ) IS NOT NULL 
+                     THEN (Select SUM(z.zd_fo_util) from prod.p_ebp e LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) ) else 0 End )) As fo_util 
+                     FROM temp.p_cable_' || sro || ' c2 WHERE ST_Dwithin(St_StartPoint(c2.geom),St_EndPoint(c.geom),0.0001)),
+                     reserve = (Select (SUM(c2.reserve) + (Case when (Select SUM(z.zd_fo_util)
+                     FROM prod.p_ebp e LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) ) IS NOT NULL 
+                     THEN (Select SUM(z.zd_fo_util) from prod.p_ebp e LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) ) else 0 End )) As fo_util 
+                     FROM temp.p_cable_' || sro || ' c2 WHERE ST_Dwithin(St_StartPoint(c2.geom),St_EndPoint(c.geom),0.0001))
+
+                     WHERE c.gid = $1' USING id.gid;
+                     --EXECUTE 'UPDATE temp.p_cable_' || sro || ' c SET fo_util = (Select (SUM(c2.fo_util) + (Case when z.zd_fo_util IS NOT NULL then z.zd_fo_util else 0 End)) As fo_util FROM temp.p_cable_' || sro || ' c2 LEFT JOIN prod.p_ebp e ON ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(St_StartPoint(c2.geom),St_EndPoint(c.geom),0.0001) GROUP BY z.zd_fo_util) WHERE c.gid = $1' USING id.gid;
+                    END LOOP;
+
+
+                --------------------------------------------------------------------------------------
+
+
+                EXECUTE 'UPDATE temp.cable_pour_boite_' || sro || ' SET cb_fo_util = temp_cable.reserve FROM temp.p_cable_' || sro || ' AS temp_cable WHERE cb_id = temp_cable.this_id';
+                    
+                DROP TABLE IF EXISTS temp.p_cable_tbr;
+                                        
+                END;
+                $$ language plpgsql;
+
+
         """
 
-        # self.executerRequette(query, False)
+        self.executerRequette(query, False)
+
+        self.add_pg_layer("temp", "cable_pour_boite_" +  zs_refpm.split("_")[2].lower())
 
 
 
