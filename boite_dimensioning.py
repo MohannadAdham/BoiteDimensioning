@@ -357,7 +357,7 @@ class BoiteDimensioning:
                 self.dlg.findChild(QComboBox, "comboBox_ptech").setEnabled(True)
                 self.dlg.findChild(QComboBox, "comboBox_zs_refpm").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verification").setEnabled(True)
-                # self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)  
+                self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verifier_orientation").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_fibres_utiles").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_dimensions").setEnabled(True)
@@ -763,15 +763,25 @@ class BoiteDimensioning:
         # self.create_cable_cluster(zs_refpm)
 
 
+        # query to update the cables' geometry. The objective is to inhance the orientation of the cables, but we still need to verify that in the next step
 
         query_orientation = """
+        UPDATE prod.p_cable
+        SET geom = A.geom
+        FROM (
+        SELECT cb_id, St_LineMerge(St_Union(ARRAY(Select geom from prod.p_cheminement where cm_id IN (select dm_cm_id from prod.p_cond_chem 
+        where dm_cd_id IN (select cc_cd_id from prod.p_cab_cond where cc_cb_id = p.cb_id))))) as geom
+        FROM prod.p_cable p
+        WHERE cb_lt_code = (SELECT zs_lt_code FROM prod.p_zsro WHERE zs_refpm = """ + zs_refpm  """ ) AND p.cb_comment IS NULL AND cb_typelog = 'DI' -- Paramétrer cb_lt_code selon SRO
+        ) AS A
+        WHERE prod.p_cable.cb_id = A.cb_id
 
         """
 
-        # try:
-        #     self.executerRequette(query_orientation, False)
-        # except Exception as e:
-        #     self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+        try:
+            self.executerRequette(query_orientation, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
 
 
 
@@ -927,7 +937,20 @@ class BoiteDimensioning:
 
 
     def verify_orientation_cable(self):
-        pass
+
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
+
+
+
+        query = """
+
+        """
+
+
+        self.executerRequette(query, False)
+
+
+
 
 
     def calcul_fibres_utiles(self):
