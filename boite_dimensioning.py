@@ -758,7 +758,6 @@ class BoiteDimensioning:
         self.fenetreMessage(QMessageBox, "info", "before create_temp_cable_table")
         
 
-        self.create_temp_cable_table(zs_refpm)
 
         # self.create_cable_cluster(zs_refpm)
 
@@ -772,7 +771,7 @@ class BoiteDimensioning:
         SELECT cb_id, St_LineMerge(St_Union(ARRAY(Select geom from prod.p_cheminement where cm_id IN (select dm_cm_id from prod.p_cond_chem 
         where dm_cd_id IN (select cc_cd_id from prod.p_cab_cond where cc_cb_id = p.cb_id))))) as geom
         FROM prod.p_cable p
-        WHERE cb_lt_code = (SELECT zs_lt_code FROM prod.p_zsro WHERE zs_refpm = """ + zs_refpm  """ ) AND p.cb_comment IS NULL AND cb_typelog = 'DI' -- Paramétrer cb_lt_code selon SRO
+        WHERE cb_lt_code = (SELECT zs_lt_code FROM prod.p_zsro WHERE zs_refpm = '""" + zs_refpm + """' ) AND p.cb_comment IS NULL AND cb_typelog = 'DI' -- Paramétrer cb_lt_code selon SRO
         ) AS A
         WHERE prod.p_cable.cb_id = A.cb_id
 
@@ -782,6 +781,9 @@ class BoiteDimensioning:
             self.executerRequette(query_orientation, False)
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+
+
+        self.create_temp_cable_table(zs_refpm)
 
 
 
