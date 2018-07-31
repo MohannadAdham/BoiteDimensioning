@@ -107,12 +107,12 @@ class BoiteDimensioning:
         QObject.connect(Button_orientation, SIGNAL("clicked()"), self.calcul_orientation_cable)
 
         # Connect the button "pushButton_orientation"
-        # Button_verifier_orientation = self.dlg.findChild(QPushButton, "pushButton_verifier_orientation")  
-        # QObject.connect(Button_orientation, SIGNAL("clicked()"), self.verifier_orientation)
+        Button_verifier_orientation = self.dlg.findChild(QPushButton, "pushButton_verifier_orientation")  
+        QObject.connect(Button_verifier_orientation, SIGNAL("clicked()"), self.verify_orientation_cable)
 
         # Connect the button "pushButton_fibres_utiles"
-        # Button_fibres_utiles = self.dlg.findChild(QPushButton, "pushButton_fibres_utiles")
-        # QObject.connect(Button_fibres_utiles, SIGNAL("clicked()"), self.calcul_fibres_utiles)
+        Button_fibres_utiles = self.dlg.findChild(QPushButton, "pushButton_fibres_utiles")
+        QObject.connect(Button_fibres_utiles, SIGNAL("clicked()"), self.calcul_fibres_utiles)
 
         # Connect the button "pushButton_"
         # Button_dimensios = self.dlg.findChild(QPushButton, "pushButton_dimensions")
@@ -732,24 +732,6 @@ class BoiteDimensioning:
 
 
 
-    def create_temp_cable_table(self, zs_refpm):
-        self.fenetreMessage(QMessageBox, "info", "within create_temp_cable_table")
-
-        query = """ DROP TABLE IF EXISTS temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """;
-                CREATE TABLE temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ 
-                as (SELECT cable.* FROM prod.p_cable as cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code WHERE zs_refpm = '""" + zs_refpm + """');
-
-        """
-
-        try:
-            self.executerRequette(query, False)
-
-        except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
-
-
-
-
 
     def calcul_orientation_cable(self):
 
@@ -783,7 +765,7 @@ class BoiteDimensioning:
             self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
 
 
-        self.create_temp_cable_table(zs_refpm)
+        
 
 
 
@@ -945,18 +927,54 @@ class BoiteDimensioning:
 
 
         query = """
+                DROP TABLE IF EXISTS temp.controle_ebp_pour_orientation_""" +  zs_refpm.split("_")[2] + """;
+                CREATE TABLE temp.controle_ebp_pour_orientation_""" +  zs_refpm.split("_")[2] + """ AS
+                SELECT row_number() over () id, *
+                FROM (
+                    SELECT 'Structure BDD' ::varchar As type,'Boite sans câble entrant' ::varchar As intitule, bp_id , bp_comment, geom from prod.p_ebp  
+                    WHERE bp_id NOT IN (SELECT cb_bp2 FROM prod.p_cable WHERE cb_code <> 26 AND cb_bp2 IS NOT NULL) 
 
+                    UNION SELECT 'Structure BDD' ::varchar As type,'Boite sans câble sortant' ::varchar As intitule, bp_id , bp_comment, geom from prod.p_ebp  
+                    WHERE bp_pttype <> 7 AND bp_id NOT IN (SELECT cb_bp1 FROM prod.p_cable WHERE cb_bp1 IS NOT NULL) AND (bp_comment IS NULL OR bp_comment <> 'BAGUETTE')
+
+                    UNION SELECT 'Structure BDD' ::varchar As type,'Boite ayant plusieurs câbles entrant' ::varchar As intitule, bp_id , bp_comment, prod.p_ebp.geom FROM prod.p_ebp, prod.p_cable 
+                    WHERE bp_id = cb_bp2 AND cb_code <> 26 GROUP BY bp_id HAVING COUNT(cb_id) > 1 
+                ) As tbr          
+                WHERE ST_Intersects(tbr.geom, (SELECT geom FROM prod.p_zsro WHERE zs_refpm = '""" +  zs_refpm + """'));
         """
-
 
         self.executerRequette(query, False)
 
+        self.add_pg_layer("temp", "controle_ebp_pour_orientation_" +  zs_refpm.split("_")[2].lower())
 
 
+
+    def create_temp_cable_table(self, zs_refpm):
+        self.fenetreMessage(QMessageBox, "info", "within create_temp_cable_table")
+
+        query = """ DROP TABLE IF EXISTS temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """;
+                CREATE TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ 
+                as (SELECT cable.* FROM prod.p_cable as cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code WHERE zs_refpm = '""" + zs_refpm + """');
+
+        """
+
+        try:
+            self.executerRequette(query, False)
+
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
 
 
     def calcul_fibres_utiles(self):
-        pass
+
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
+        self.create_temp_cable_table(zs_refpm)
+        self.add_pg_layer("temp", "cable_pour_boite_" +  zs_refpm.split("_")[2].lower())
+        
+        query = """
+        """
+
+        # self.executerRequette(query, False)
 
 
 
