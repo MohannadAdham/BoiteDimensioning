@@ -737,7 +737,6 @@ class BoiteDimensioning:
 
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
-        self.fenetreMessage(QMessageBox, "info", "before create_temp_cable_table")
         
 
 
@@ -792,7 +791,8 @@ class BoiteDimensioning:
                             CREATE INDEX cb_cluster_""" + zs_refpm.split("_")[2] + """_geom_gist ON temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ USING GIST (geom); 
                             
                             FOR nro IN (SELECT c.cb_id, c.cb_code,c.cb_lt_code, c.geom, s.st_nom FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ c, prod.p_sitetech s 
-                            WHERE ST_INTERSECTS(c.geom, s.geom) AND st_id = 2 AND c.cb_lt_code = 4 ) 
+                            WHERE ST_INTERSECTS(c.geom, s.geom) AND st_id = (SELECT lt_st_code FROM prod.p_ltech WHERE lt_etiquet LIKE '%""" + zs_refpm.split("_")[2] + """')
+                             AND c.cb_lt_code = (SELECT zs_lt_code FROM prod.p_zsro WHERE zs_refpm = '""" + zs_refpm + """' )) 
                             LOOP -- Vérifier site technique
                             
                             INSERT INTO temp.cb_cluster_""" + zs_refpm.split("_")[2] + """(this_id, cb_code, cb_lt_code, cb_r3_code, rang, hierarchie, geom)   
@@ -954,7 +954,8 @@ class BoiteDimensioning:
 
         query = """ DROP TABLE IF EXISTS temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """;
                 CREATE TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ 
-                as (SELECT cable.* FROM prod.p_cable as cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code WHERE zs_refpm = '""" + zs_refpm + """');
+                as (SELECT cable.* FROM prod.p_cable as cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code 
+                WHERE zs_refpm = '""" + zs_refpm + """' AND cb_typelog = 'DI');
 
                 -- Add a column that will hold the values of fb_util
                 ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ ADD COLUMN cb_fo_util integer;
@@ -1011,21 +1012,22 @@ class BoiteDimensioning:
 
                 --------------------------------------------------------------------------------------
 
-                EXECUTE ' UPDATE temp.p_cable_' || sro || '
-                     SET fo_util = B.nbfibre,
-                     reserve = B.reserve
+                EXECUTE 'UPDATE temp.p_cable_' || sro || '
+                
+                     SET fo_util = (Case when fo_util IS NOT NULL then fo_util else 0 End) + B.nbfibre,
+                     reserve = (Case when temp.p_cable_' || sro || '.reserve IS NOT NULL then temp.p_cable_' || sro || '.reserve else 0 End) + B.reserve
                      FROM (
                         SELECT c.cb_id as this_id, bp.zp_nbfibre as nbfibre, bp.zp_reserve as reserve
-                        FROM temp.cable_pour_boite_""" +  zs_refpm.split("_")[2] + """ c 
+                        FROM temp.cable_pour_boite_' || sro || ' c 
 
                      LEFT JOIN (
                                 SELECT bp_id, zp_id, zp_nbfibre, zp_reserve, prod.p_ebp.geom
                                 FROM prod.p_ebp
                                 join prod.p_zpbo on bp_id = zp_bp_code
-                                where bp_typelog = '' || typelog || ''
+                                where bp_typelog = ' || quote_literal(typelog) || '
                      ) as bp
 
-                     ON ST_DWithin(St_EndPoint(c.geom), bp.geom, 0.0001)
+                    ON ST_DWithin(St_EndPoint(c.geom), bp.geom, 0.0001)
                      WHERE bp.zp_nbfibre IS NOT NULL
                      ) AS B
                      WHERE temp.p_cable_' || sro || '.this_id = B.this_id';
@@ -1059,9 +1061,18 @@ class BoiteDimensioning:
                 CREATE TABLE temp.p_cable_tbr (gid serial, rang integer, this_id integer, fo_util integer, reserve integer, geom Geometry(Linestring,2154));
                 EXECUTE 'INSERT INTO temp.p_cable_tbr SELECT * FROM temp.p_cable_' || sro; 
 
-                    For id in (Select gid from temp.p_cable_tbr WHERE fo_util IS NULL order by rang DESC) loop
-                    
-                     EXECUTE 'UPDATE temp.p_cable_' || sro || ' c SET fo_util = (Select (SUM(c2.fo_util) + (Case when (Select SUM(z.zd_fo_util)
+                    For id in (Select gid from temp.p_cable_tbr -- WHERE fo_util IS NULL 
+                    order by rang DESC) loop
+                        ------------ test part ------------------
+                        EXECUTE 'UPDATE temp.p_cable_' || sro || ' c SET fo_util = COALESCE(fo_util, 0) + 
+                        (COALESCE((SELECT SUM(COALESCE(c2.fo_util, 0)) FROM temp.p_cable_' || sro || ' c2 WHERE ST_Dwithin(St_StartPoint(c2.geom), St_EndPoint(c.geom),0.0001)), 0)),
+                        reserve = COALESCE(c.reserve, 0) + 
+                        (COALESCE((SELECT SUM(COALESCE(c2.reserve, 0)) FROM temp.p_cable_' || sro || ' c2 WHERE ST_Dwithin(St_StartPoint(c2.geom), St_EndPoint(c.geom),0.0001)), 0))                        WHERE c.gid = $1' USING id.gid;
+                    END LOOP;
+
+
+                    -----------------------------------------
+                     /* EXECUTE 'UPDATE temp.p_cable_' || sro || ' c SET fo_util = (Case when fo_util IS NOT NULL then fo_util else 0 End) + (Select (SUM(c2.fo_util) + (Case when (Select SUM(z.zd_fo_util)
                      FROM prod.p_ebp e LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) ) IS NOT NULL 
                      THEN (Select SUM(z.zd_fo_util) from prod.p_ebp e LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) ) else 0 End )) As fo_util 
                      FROM temp.p_cable_' || sro || ' c2 WHERE ST_Dwithin(St_StartPoint(c2.geom),St_EndPoint(c.geom),0.0001)),
@@ -1072,7 +1083,7 @@ class BoiteDimensioning:
 
                      WHERE c.gid = $1' USING id.gid;
                      --EXECUTE 'UPDATE temp.p_cable_' || sro || ' c SET fo_util = (Select (SUM(c2.fo_util) + (Case when z.zd_fo_util IS NOT NULL then z.zd_fo_util else 0 End)) As fo_util FROM temp.p_cable_' || sro || ' c2 LEFT JOIN prod.p_ebp e ON ST_Dwithin(e.geom,St_EndPoint(c.geom),0.0001) LEFT JOIN prod.p_zdep z ON e.bp_id = zd_r6_code WHERE ST_Dwithin(St_StartPoint(c2.geom),St_EndPoint(c.geom),0.0001) GROUP BY z.zd_fo_util) WHERE c.gid = $1' USING id.gid;
-                    END LOOP;
+                    END LOOP;*/
 
 
                 --------------------------------------------------------------------------------------
@@ -1087,7 +1098,7 @@ class BoiteDimensioning:
 
 
         """
-
+        self.fenetreMessage(QMessageBox, "INFO", query)
         self.executerRequette(query, False)
 
         self.add_pg_layer("temp", "cable_pour_boite_" +  zs_refpm.split("_")[2].lower())
