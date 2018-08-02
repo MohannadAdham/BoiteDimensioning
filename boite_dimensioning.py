@@ -115,8 +115,8 @@ class BoiteDimensioning:
         QObject.connect(Button_fibres_utiles, SIGNAL("clicked()"), self.calcul_fibres_utiles)
 
         # Connect the button "pushButton_"
-        # Button_dimensios = self.dlg.findChild(QPushButton, "pushButton_dimensions")
-        # QObject.connect(Button_dimensios, SIGNAL("clicked()"), self.calcul_cable_dimensions)
+        Button_dimensios = self.dlg.findChild(QPushButton, "pushButton_dimensions")
+        QObject.connect(Button_dimensios, SIGNAL("clicked()"), self.calcul_boite_dimensions)
 
         # Connect the butoon "pushButton_mettre_a_jour_chemin"
         # Button_mettre_a_jour_chemin = self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_chemin")
@@ -790,7 +790,7 @@ class BoiteDimensioning:
                             hierarchie varchar, passage integer, etiquette varchar(254), geom Geometry(Linestring,2154));    
                             CREATE INDEX cb_cluster_""" + zs_refpm.split("_")[2] + """_geom_gist ON temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ USING GIST (geom); 
                             
-                            FOR nro IN (SELECT c.cb_id, c.cb_code,c.cb_lt_code, c.geom, s.st_nom FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ c, prod.p_sitetech s 
+                            FOR nro IN (SELECT c.cb_id, c.cb_code,c.cb_lt_code, c.geom, s.st_nom FROM temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ c, prod.p_sitetech s 
                             WHERE ST_INTERSECTS(c.geom, s.geom) AND st_id = (SELECT lt_st_code FROM prod.p_ltech WHERE lt_etiquet LIKE '%""" + zs_refpm.split("_")[2] + """')
                              AND c.cb_lt_code = (SELECT zs_lt_code FROM prod.p_zsro WHERE zs_refpm = '""" + zs_refpm + """' )) 
                             LOOP -- Vérifier site technique
@@ -802,7 +802,7 @@ class BoiteDimensioning:
 
                             END LOOP;
 
-                            FOR id IN (SELECT cb_id FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ WHERE cb_code <> 26)
+                            FOR id IN (SELECT cb_id FROM temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ WHERE cb_code <> 26)
 
                             LOOP
                             
@@ -813,7 +813,7 @@ class BoiteDimensioning:
                             ROW_NUMBER() OVER(PARTITION BY l.hierarchie ORDER BY ST_X(ST_EndPoint(ST_INTERSECTION(ST_BUFFER(ST_STARTPOINT(c.geom), 1), c.geom)))),'.', l.hierarchie) as hierarchie, 
                                 CASE WHEN ST_Touches(c.geom, St_EndPoint(l.geom)) AND c.cb_code = l.cb_code AND l.passage IS NULL THEN l.this_id 
                                      WHEN ST_Touches(c.geom, St_EndPoint(l.geom)) AND c.cb_code = l.cb_code AND l.passage IS NOT NULL THEN l.passage END as test, c.geom
-                            FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ c, temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ l
+                            FROM temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ c, temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ l
                             WHERE l.rang = (counter - 1) AND St_Touches(c.geom, St_EndPoint(l.geom)) AND c.cb_id NOT IN (SELECT this_id FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """) 
                             AND c.cb_code <> 26 
                             ORDER BY ST_X(ST_EndPoint(ST_INTERSECTION(ST_BUFFER(ST_STARTPOINT(c.geom), 1), c.geom)));
@@ -885,14 +885,14 @@ class BoiteDimensioning:
                                              ELSE NULL END as partie
                                     FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c1
                                     LEFT JOIN temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c2 ON c2.this_id = c1.passage
-                                    LEFT JOIN (SELECT SUBSTRING(b.ba_etiquet, 11,4)::varchar as quadri, c4.hierarchie FROM temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """ ca , temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c4, prod.p_baie b WHERE b.ba_id = ca.cb_ba1 AND c4.this_id = ca.cb_id AND ca.cb_ba1 IS NOT NULL) c3 ON c3.hierarchie = RIGHT(c1.hierarchie, 3)
+                                    LEFT JOIN (SELECT SUBSTRING(b.ba_etiquet, 11,4)::varchar as quadri, c4.hierarchie FROM temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ ca , temp.cb_cluster_""" + zs_refpm.split("_")[2] + """ c4, prod.p_baie b WHERE b.ba_id = ca.cb_ba1 AND c4.this_id = ca.cb_id AND ca.cb_ba1 IS NOT NULL) c3 ON c3.hierarchie = RIGHT(c1.hierarchie, 3)
                                     ORDER BY RIGHT(c2.hierarchie, 3),  c2.rang, LEFT(c2.hierarchie, 50), RIGHT(c1.hierarchie, 3),  c1.rang, LEFT(c1.hierarchie, 50) 
                                     ) AS A
                                 ) AS B
                             WHERE temp.cb_cluster_""" + zs_refpm.split("_")[2] + """.this_id = B.this_id;
 
 
-                            UPDATE temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """
+                            UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """
                             SET cb_etiquet = B.etiquette,
                                 cb_lt_code = B.cb_lt_code,
                                 cb_r3_code = B.cb_r3_code
@@ -900,7 +900,7 @@ class BoiteDimensioning:
                                 SELECT * 
                                 FROM temp.cb_cluster_""" + zs_refpm.split("_")[2] + """
                                  ) as B
-                            WHERE temp.cable_for_boite_""" + zs_refpm.split("_")[2] + """.cb_id = b.this_id;*/
+                            WHERE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """.cb_id = b.this_id;*/
                             
                         END;
                         $$ language plpgsql;
@@ -959,6 +959,7 @@ class BoiteDimensioning:
 
                 -- Add a column that will hold the values of fb_util
                 ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ ADD COLUMN cb_fo_util integer;
+                ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN passage BOOLEAN DEFAULT FALSE;
 
         """
 
@@ -1101,10 +1102,61 @@ class BoiteDimensioning:
         self.fenetreMessage(QMessageBox, "INFO", query)
         self.executerRequette(query, False)
 
-        self.add_pg_layer("temp", "cable_pour_boite_" +  zs_refpm.split("_")[2].lower())
+        self.find_passage(zs_refpm)
+        self.add_pg_layer("temp", "cable_pour_boite_" + zs_refpm.split("_")[2].lower())
 
 
 
+
+
+    def calcul_boite_dimensions(self):
+
+        self.fenetreMessage(QMessageBox, "INFO", "Within calcul_boite_dimensions")
+
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
+
+        self.create_temp_boite_table(zs_refpm)
+
+        self.add_pg_layer("temp", "ebp_" + zs_refpm.split("_")[2].lower())
+
+
+
+
+    def create_temp_boite_table(self, zs_refpm):
+
+        query = """DROP TABLE IF EXISTS temp.ebp_""" + zs_refpm.split("_")[2].lower() + """;
+                CREATE TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS SELECT * FROM prod.p_ebp
+                WHERE bp_zs_code = '""" + zs_refpm.split("_")[2] + """';
+
+                ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN nb_epissures INT,
+                ADD COLUMN nb_cassettes_epissure INT DEFAULT 0, ADD COLUMN nb_cassettes_reserve INT DEFAULT 0, ADD COLUMN nb_cassettes_total INT DEFAULT 0;
+
+        """
+
+        try:
+            self.executerRequette(query, False)
+
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+        self.fenetreMessage(QMessageBox, "INFO", "The table temp.ebp_"  + zs_refpm.split("_")[2] + " is created")
+
+
+
+
+
+    def find_passage(self, zs_refpm):
+
+        query = """
+        UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ SET passage = true
+        WHERE cb_etiquet like '%-%';
+        """
+
+        try:
+            self.executerRequette(query, False)
+
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
 
 
