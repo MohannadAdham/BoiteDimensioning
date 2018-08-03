@@ -958,7 +958,8 @@ class BoiteDimensioning:
                 WHERE zs_refpm = '""" + zs_refpm + """' AND cb_typelog = 'DI');
 
                 -- Add a column that will hold the values of fb_util
-                ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ ADD COLUMN cb_fo_util integer;
+                ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN cb_fo_util integer;
+                ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN capa_fo_util integer;
                 ALTER TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN passage BOOLEAN DEFAULT FALSE;
 
         """
@@ -1103,9 +1104,23 @@ class BoiteDimensioning:
         self.executerRequette(query, False)
 
         self.find_passage(zs_refpm)
+        self.cb_code_to_fo_util(zs_refpm)
         self.add_pg_layer("temp", "cable_pour_boite_" + zs_refpm.split("_")[2].lower())
 
 
+
+    def find_passage(self, zs_refpm):
+
+        query = """
+        UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ SET passage = true
+        WHERE cb_etiquet like '%-%';
+        """
+
+        try:
+            self.executerRequette(query, False)
+
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
 
 
@@ -1116,6 +1131,8 @@ class BoiteDimensioning:
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
         self.create_temp_boite_table(zs_refpm)
+
+        self.calcul_nb_epissures(zs_refpm)
 
         self.add_pg_layer("temp", "ebp_" + zs_refpm.split("_")[2].lower())
 
@@ -1143,20 +1160,72 @@ class BoiteDimensioning:
 
 
 
-
-
-    def find_passage(self, zs_refpm):
-
-        query = """
-        UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ SET passage = true
-        WHERE cb_etiquet like '%-%';
+    def cb_code_to_fo_util(self, zs_refpm):
+        query = """UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ SET capa_fo_util = case
+                WHEN cb_code in (1, 12, 19) THEN 12
+                WHEN cb_code in (2, 13, 20) THEN 24
+                WHEN cb_code in (3, 14, 21) THEN 48
+                WHEN cb_code in (4, 15, 22) THEN 72
+                WHEN cb_code in (5, 16, 23) THEN 96
+                WHEN cb_code in (6, 17, 24) THEN 144
+                WHEN cb_code in (7, 18, 25) THEN 288
+                WHEN cb_code in (8) THEN 432
+                WHEN cb_code in (9) THEN 576
+                WHEN cb_code in (10) THEN 720
+                WHEN cb_code in (11) THEN 864
+                END;
         """
 
         try:
             self.executerRequette(query, False)
-
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+
+    def calcul_nb_epissures(self, zs_refpm):
+
+        query = """-- first case : passage
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET 
+                        nb_epissures = sub1.nb_epissures
+                        -- take the minimum value between the sum of the values of the cables that depart except passage, and the capacity of the cable that enters the boite
+                        FROM (SELECT bp_id, LEAST(sum(c1.cb_fo_util), avg(c2.capa_fo_util)::int) as nb_epissures
+                            from temp.ebp_maz1 as bp
+                            -- join the cables that depart from the boite
+                            join temp.cable_pour_boite_maz1 c1
+                            on st_dwithin(bp.geom, st_startpoint(c1.geom), 0.0001)
+                            -- join the cables that enter into the boite
+                            join temp.cable_pour_boite_maz1 c2
+                            on st_dwithin(bp.geom, st_endpoint(c2.geom), 0.0001)
+                            where c2.passage and not c1.passage
+                            group by bp_id) sub1
+                WHERE ebp.bp_id = sub1.bp_id;
+
+
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET 
+                        nb_epissures = sub2.nb_epissures
+                        FROM (
+                            SELECT bp_id, LEAST(sum(c.cb_fo_util), avg(c2.capa_fo_util)::int) AS nb_epissures
+                             from temp.ebp_maz1 as bp
+                            -- join with the cables that depart from the boite
+                            join temp.cable_pour_boite_maz1 c
+                            on st_dwithin(bp.geom, st_startpoint(c.geom), 0.0001)
+                            -- join with the cable that enter the boite
+                            join temp.cable_pour_boite_maz1 c2
+                            on st_dwithin(bp.geom, st_endpoint(c2.geom), 0.0001)
+                            where not c2.passage and nb_epissures is NULL
+                            group by bp_id, c2.capa_fo_util) sub2
+                        WHERE ebp.bp_id = sub2.bp_id;
+            """
+
+        try:
+            self.executerRequette(query, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+
+
+
+
 
 
 
