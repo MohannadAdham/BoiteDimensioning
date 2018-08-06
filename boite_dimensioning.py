@@ -1184,6 +1184,8 @@ class BoiteDimensioning:
 
     def calcul_nb_epissures(self, zs_refpm):
 
+        self.create_intermediate_table(zs_refpm)
+
         query1 = """ -- upddate the field zp_reserve in the table temp.ebp_*
                 UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp 
                 SET zp_reserve = zpbo.zp_reserve
@@ -1192,7 +1194,16 @@ class BoiteDimensioning:
 
         """
 
-        query2 = """-- first case : passage
+
+
+        try:
+            self.executerRequette(query1, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+
+
+        query2_old = """-- first case : passage
                 UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET 
                         nb_epissures = sub1.nb_epissures
                         -- take the minimum value between the sum of the values of the cables that depart except passage, and the capacity of the cable that enters the boite
@@ -1207,6 +1218,8 @@ class BoiteDimensioning:
                             where c2.passage and ((not c1.passage) or (c1.cb_code <> c2.cb_code))
                             group by bp_id) sub1
                 WHERE ebp.bp_id = sub1.bp_id;
+
+
 
 
                 --UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET 
@@ -1225,17 +1238,86 @@ class BoiteDimensioning:
                         WHERE ebp.bp_id = sub2.bp_id;*/
             """
 
+
+
+        query2 = """
+                -- refresh p_zpbo
+                UPDATE prod.p_zpbo SET zp_comment = zp_comment;
+
+
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                nb_epissures = ebp.zp_reserve;
+
+
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                nb_epissures = ebp.nb_epissures + COALESCE(sub.nb_epissures, 0)
+                -- take the minimum value between the sum of the values of the cables that depart except passage, and the capacity of the cable that enters the boite
+                FROM (SELECT non_passage.bp_id as bp_id, COALESCE(sum(non_passage.cb_fo_util), 0) as nb_epissures
+                    FROM (SELECT ebp2.bp_id as bp_id, COALESCE(c.cb_fo_util, 0) as cb_fo_util
+                            FROM temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp2
+                            LEFT JOIN temp.ebp_cable_""" + zs_refpm.split("_")[2].lower() + """ AS ebp_cable
+                            ON ebp2.bp_id = ebp_cable.bp_id
+                            LEFT JOIN temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ AS c
+                            ON c.cb_id = ebp_cable.cb_id
+                            WHERE ebp_cable.entree_sortie = 's' AND NOT ebp_cable.passage) AS non_passage
+                            GROUP BY non_passage.bp_id) AS sub
+                WHERE ebp.bp_id = sub.bp_id;
+
+
+                -- compare the value in nb_epissures and the capacity of the cable and take the least between them
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                nb_epissures = LEAST(ebp.nb_epissures, c.capa_fo_util)
+                FROM temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS bp
+                JOIN temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ AS c
+                ON st_dwithin(bp.geom, st_endpoint(c.geom), 0.0001)
+                WHERE ebp.bp_id = bp.bp_id;
+
+        """
+
+
+
         try:
-            self.executerRequette(query1, False)
+            self.executerRequette(query2, False)
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
+        self.fenetreMessage(QMessageBox, "info", "The query is executed")
 
 
 
+    def create_intermediate_table(self, zs_refpm):
+
+        query = """DROP TABLE IF EXISTS temp.ebp_cable_""" + zs_refpm.split("_")[2].lower() + """;
+                CREATE TABLE temp.ebp_cable_""" + zs_refpm.split("_")[2].lower() + """ as
+                SELECT bp_id, cb_id, 's' AS entree_sortie, false as passage
+                FROM temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ as bp
+                JOIN temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ as c
+                ON c.cb_bp1 = bp.bp_id
+                UNION 
+                SELECT bp_id, cb_id, 'e' AS entree_sortie, false as passage
+                from temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ as bp
+                JOIN temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ as c
+                ON c.cb_bp2 = bp.bp_id
+                ORDER BY bp_id, entree_sortie;
+
+
+                UPDATE temp.ebp_cable_""" + zs_refpm.split("_")[2].lower() + """ SET passage = true
+                WHERE (bp_id, cb_id) IN (select distinct tempo.bp_id, tempo.cb_id
+                FROM temp.ebp_cable_""" + zs_refpm.split("_")[2].lower() + """ as tempo, temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ as c1, 
+                temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ AS c2
+                WHERE split_part(c1.cb_etiquet, '-', '1') = split_part(c2.cb_etiquet, '-', '1')
+                AND c1.cb_etiquet <> c2.cb_etiquet
+                AND (c1.cb_bp1 = tempo.bp_id OR c1.cb_bp2 = tempo.bp_id)
+                AND (c2.cb_bp1 = tempo.bp_id OR c2.cb_bp2 = tempo.bp_id)
+                AND (tempo.cb_id = c1.cb_id OR tempo.cb_id = c2.cb_id));
+
+        """
 
 
 
-
+        try:
+            self.executerRequette(query, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
 
