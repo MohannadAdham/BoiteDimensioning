@@ -1145,7 +1145,7 @@ class BoiteDimensioning:
                 CREATE TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS SELECT * FROM prod.p_ebp
                 WHERE bp_zs_code = '""" + zs_refpm.split("_")[2] + """';
 
-                ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN zp_reserve INT DEFAULT 0, ADD COLUMN nb_epissures INT,
+                ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN capa_amnt_fo_util INT, ADD COLUMN zp_reserve INT DEFAULT 0, ADD COLUMN nb_epissures INT,
                 ADD COLUMN nb_cassettes_epissure INT DEFAULT 0, ADD COLUMN nb_cassettes_reserve INT DEFAULT 0, ADD COLUMN nb_cassettes_total INT DEFAULT 0;
 
         """
@@ -1266,11 +1266,12 @@ class BoiteDimensioning:
 
                 -- compare the value in nb_epissures and the capacity of the cable and take the least between them
                 UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
-                nb_epissures = LEAST(ebp.nb_epissures, c.capa_fo_util)
+                nb_epissures = LEAST(ebp.nb_epissures, c.capa_fo_util), capa_amnt_fo_util = c.capa_fo_util
                 FROM temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS bp
                 JOIN temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ AS c
                 ON st_dwithin(bp.geom, st_endpoint(c.geom), 0.0001)
                 WHERE ebp.bp_id = bp.bp_id;
+
 
         """
 
@@ -1282,6 +1283,7 @@ class BoiteDimensioning:
             self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
         self.fenetreMessage(QMessageBox, "info", "The query is executed")
+        self.calcul_nb_cassettes(zs_refpm)
 
 
 
@@ -1321,3 +1323,16 @@ class BoiteDimensioning:
             self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
 
+
+    def calcul_nb_cassettes(self, zs_refpm):
+
+        query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                nb_cassettes_epissure = ceiling(ebp.nb_epissures / 12.0);
+
+        """
+
+
+        try:
+            self.executerRequette(query, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
