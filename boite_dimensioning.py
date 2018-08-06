@@ -1145,7 +1145,7 @@ class BoiteDimensioning:
                 CREATE TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS SELECT * FROM prod.p_ebp
                 WHERE bp_zs_code = '""" + zs_refpm.split("_")[2] + """';
 
-                ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN nb_epissures INT,
+                ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN zp_reserve INT DEFAULT 0, ADD COLUMN nb_epissures INT,
                 ADD COLUMN nb_cassettes_epissure INT DEFAULT 0, ADD COLUMN nb_cassettes_reserve INT DEFAULT 0, ADD COLUMN nb_cassettes_total INT DEFAULT 0;
 
         """
@@ -1184,7 +1184,15 @@ class BoiteDimensioning:
 
     def calcul_nb_epissures(self, zs_refpm):
 
-        query = """-- first case : passage
+        query1 = """ -- upddate the field zp_reserve in the table temp.ebp_*
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp 
+                SET zp_reserve = zpbo.zp_reserve
+                FROM prod.p_zpbo as zpbo
+                WHERE ebp.bp_id = zpbo.zp_bp_code;
+
+        """
+
+        query2 = """-- first case : passage
                 UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET 
                         nb_epissures = sub1.nb_epissures
                         -- take the minimum value between the sum of the values of the cables that depart except passage, and the capacity of the cable that enters the boite
@@ -1196,14 +1204,14 @@ class BoiteDimensioning:
                             -- join the cables that enter into the boite
                             join temp.cable_pour_boite_maz1 c2
                             on st_dwithin(bp.geom, st_endpoint(c2.geom), 0.0001)
-                            where c2.passage and not c1.passage
+                            where c2.passage and ((not c1.passage) or (c1.cb_code <> c2.cb_code))
                             group by bp_id) sub1
                 WHERE ebp.bp_id = sub1.bp_id;
 
 
-                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET 
-                        nb_epissures = sub2.nb_epissures
-                        FROM (
+                --UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET 
+                        --nb_epissures = sub2.nb_epissures
+                        /*FROM (
                             SELECT bp_id, LEAST(sum(c.cb_fo_util), avg(c2.capa_fo_util)::int) AS nb_epissures
                              from temp.ebp_maz1 as bp
                             -- join with the cables that depart from the boite
@@ -1214,11 +1222,11 @@ class BoiteDimensioning:
                             on st_dwithin(bp.geom, st_endpoint(c2.geom), 0.0001)
                             where not c2.passage and nb_epissures is NULL
                             group by bp_id, c2.capa_fo_util) sub2
-                        WHERE ebp.bp_id = sub2.bp_id;
+                        WHERE ebp.bp_id = sub2.bp_id;*/
             """
 
         try:
-            self.executerRequette(query, False)
+            self.executerRequette(query1, False)
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
