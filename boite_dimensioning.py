@@ -1131,8 +1131,11 @@ class BoiteDimensioning:
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
         self.create_temp_boite_table(zs_refpm)
-
+        self.calcul_nb_cassettes_max(zs_refpm)
         self.calcul_nb_epissures(zs_refpm)
+        self.calcul_nb_cassettes_max(zs_refpm)
+        self.calcul_nb_cassettes(zs_refpm)
+        self.calcul_type_boite(zs_refpm)
 
         self.add_pg_layer("temp", "ebp_" + zs_refpm.split("_")[2].lower())
 
@@ -1146,7 +1149,7 @@ class BoiteDimensioning:
                 WHERE bp_zs_code = '""" + zs_refpm.split("_")[2] + """';
 
                 ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN capa_amnt_fo_util INT, ADD COLUMN zp_reserve INT DEFAULT 0, ADD COLUMN nb_epissures INT,
-                ADD COLUMN nb_cassettes_epissure INT DEFAULT 0, ADD COLUMN nb_cassettes_reserve INT DEFAULT 0, ADD COLUMN nb_cassettes_total INT DEFAULT 0;
+                ADD COLUMN nb_cassettes_epissure INT DEFAULT 0, ADD COLUMN nb_cassettes_reserve INT DEFAULT 0, ADD COLUMN nb_cassettes_max INT DEFAULT 999, ADD COLUMN nb_cassettes_total INT DEFAULT 0;
 
         """
 
@@ -1283,7 +1286,7 @@ class BoiteDimensioning:
             self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
 
         self.fenetreMessage(QMessageBox, "info", "The query is executed")
-        self.calcul_nb_cassettes(zs_refpm)
+        
 
 
 
@@ -1324,6 +1327,29 @@ class BoiteDimensioning:
 
 
 
+
+    def calcul_nb_cassettes_max(self, zs_refpm):
+
+        query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                nb_cassettes_max = CASE
+                WHEN capa_amnt_fo_util = 12 THEN 1
+                WHEN capa_amnt_fo_util = 24 THEN 2
+                WHEN capa_amnt_fo_util = 48 THEN 4
+                WHEN capa_amnt_fo_util = 72 THEN 6
+                WHEN capa_amnt_fo_util = 96 THEN 8
+                WHEN capa_amnt_fo_util = 144 THEN 12
+                END
+                WHERE bp_typelog = 'PBO'
+
+        """
+        try:
+            self.executerRequette(query, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+
+
+
     def calcul_nb_cassettes(self, zs_refpm):
 
         query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
@@ -1332,10 +1358,40 @@ class BoiteDimensioning:
                 -- add one cassette to the reserve in the case of BPE and capa_amnt_fo_util <= 144
                 UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
                 nb_cassettes_reserve = nb_cassettes_reserve + 1
-                WHERE bp_typelog = 'BPE' AND capa_amnt_fo_util <= 144
+                WHERE bp_typelog = 'BPE' AND capa_amnt_fo_util <= 144;
+
+                -- calculate nb_cassettes_total
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                nb_cassettes_total = LEAST(nb_cassettes_max, nb_cassettes_epissure + nb_cassettes_reserve);
 
         """
 
+
+        try:
+            self.executerRequette(query, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+
+    def calcul_type_boite(self, zs_refpm):
+
+        query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                bp_model = 8;
+
+
+
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                    bp_model = CASE
+                    WHEN nb_cassettes_total <= 4 AND bp_pttype in (2, 3, 5, 6, 7) THEN 1
+                    WHEN nb_cassettes_total > 4 AND nb_cassettes_total <= 12 and bp_pttype in (2, 3, 5, 6, 7) THEN 2
+                    WHEN nb_cassettes_total > 12 AND nb_cassettes_total <= 24 THEN 5
+                    WHEN nb_cassettes_total <= 4 AND bp_pttype in (1, 4) THEN 3
+                    WHEN nb_cassettes_total > 4 AND nb_cassettes_total <= 12 AND bp_pttype in (1, 4) THEN 4
+                    WHEN nb_cassettes_total > 24 AND nb_cassettes_total <= 56 AND bp_pttype in (1, 4) THEN 6
+                    WHEN nb_cassettes_total > 56 AND nb_cassettes_total <= 80 AND bp_pttype in (1, 4) THEN 7
+                    END;
+
+        """
 
         try:
             self.executerRequette(query, False)
