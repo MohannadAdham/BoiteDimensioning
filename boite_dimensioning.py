@@ -1327,7 +1327,12 @@ class BoiteDimensioning:
     def calcul_nb_cassettes(self, zs_refpm):
 
         query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
-                nb_cassettes_epissure = ceiling(ebp.nb_epissures / 12.0);
+                nb_cassettes_epissure = ceiling(ebp.nb_epissures / 12.0), nb_cassettes_reserve = ceiling((capa_amnt_fo_util / 12.0) * 0.3);
+
+                -- add one cassette to the reserve in the case of BPE and capa_amnt_fo_util <= 144
+                UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
+                nb_cassettes_reserve = nb_cassettes_reserve + 1
+                WHERE bp_typelog = 'BPE' AND capa_amnt_fo_util <= 144
 
         """
 
