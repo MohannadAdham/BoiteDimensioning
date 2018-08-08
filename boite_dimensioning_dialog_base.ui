@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>435</width>
-    <height>557</height>
+    <height>586</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -134,7 +134,7 @@
          </layout>
         </item>
         <item row="7" column="0">
-         <widget class="QPushButton" name="pushButton_mettre_a_jour_cable">
+         <widget class="QPushButton" name="pushButton_mettre_a_jour_ebp">
           <property name="enabled">
            <bool>false</bool>
           </property>

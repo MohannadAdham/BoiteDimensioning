@@ -122,9 +122,9 @@ class BoiteDimensioning:
         Button_verify_capacity = self.dlg.findChild(QPushButton, "pushButton_verify_capacity")
         QObject.connect(Button_verify_capacity, SIGNAL("clicked()"), self.verify_capacite_chambre)
 
-        # Connect the button "pushButton_mettre_a_jour_cable"
-        # Button_mettre_a_jour_cable = self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_cable")
-        # QObject.connect(Button_mettre_a_jour_cable, SIGNAL("clicked()"), self.update_p_cable)
+        # Connect the button "pushButton_mettre_a_jour_ebp"
+        Button_mettre_a_jour_ebp = self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_ebp")
+        QObject.connect(Button_mettre_a_jour_ebp, SIGNAL("clicked()"), self.update_p_ebp)
 
 
 
@@ -362,7 +362,7 @@ class BoiteDimensioning:
                 self.dlg.findChild(QPushButton, "pushButton_fibres_utiles").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_dimensions").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verify_capacity").setEnabled(True)
-                self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_cable").setEnabled(True)
+                self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_ebp").setEnabled(True)
 
                 # self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_chemin")
                 # self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_cable").setEnabled(True)
@@ -1147,6 +1147,7 @@ class BoiteDimensioning:
         query = """DROP TABLE IF EXISTS temp.ebp_""" + zs_refpm.split("_")[2].lower() + """;
                 CREATE TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS SELECT * FROM prod.p_ebp
                 WHERE bp_zs_code = '""" + zs_refpm.split("_")[2] + """';
+                
 
                 ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN capa_amnt_fo_util INT, ADD COLUMN zp_reserve INT DEFAULT 0, ADD COLUMN nb_epissures INT,
                 ADD COLUMN nb_cassettes_epissure INT DEFAULT 0, ADD COLUMN nb_cassettes_reserve INT DEFAULT 0, ADD COLUMN nb_cassettes_max INT DEFAULT 999, ADD COLUMN nb_cassettes_total INT DEFAULT 0;
@@ -1441,15 +1442,15 @@ class BoiteDimensioning:
 
                                 IF counter1 > $2 OR counter2 > $3 OR counter3 > $4 OR counter4 > $5 OR (counter1 + counter2 + counter3 + counter4) > 4 then 
 
-                                INSERT INTO public.erreurs_chambres VALUES (enreg.pt_id, enreg.pt_nature, ARRAY[counter1,counter2,counter3,counter4], enreg.geom);
+                                INSERT INTO temp.erreurs_chambres_""" + zs_refpm.split("_")[2].lower() + """ VALUES (enreg.pt_id, enreg.pt_nature, ARRAY[counter1,counter2,counter3,counter4], enreg.geom);
 
                                 Elsif (counter2 > 0 AND counter1 > 2 * counter2) OR (counter3 > 0 AND counter2 > 2 * counter3) OR (counter4 > 0 AND counter3 > 2 * counter4) then
 
-                                INSERT INTO public.erreurs_chambres VALUES (enreg.pt_id, enreg.pt_nature, ARRAY[counter1,counter2,counter3,counter4], enreg.geom);
+                                INSERT INTO temp.erreurs_chambres_""" + zs_refpm.split("_")[2].lower() + """ VALUES (enreg.pt_id, enreg.pt_nature, ARRAY[counter1,counter2,counter3,counter4], enreg.geom);
 
                                 Elsif (counter4 >0 AND counter4 = $5 AND (counter1 > 0 OR counter2 > 0 OR counter3 > 0)) OR (counter3 >0 AND counter3 = $4 AND (counter1 > 0 OR counter2 > 0 OR counter4 > 0)) OR (counter2 >0 AND counter2 = $3 AND (counter1 > 0 OR counter3 > 0 OR counter4 > 0)) OR (counter1 >0 AND counter1 = $2 AND (counter2 > 0 OR counter3 > 0 OR counter4 > 0)) then
 
-                                INSERT INTO public.erreurs_chambres VALUES (enreg.pt_id, enreg.pt_nature, ARRAY[counter1,counter2,counter3,counter4], enreg.geom);
+                                INSERT INTO temp.erreurs_chambres_""" + zs_refpm.split("_")[2].lower() + """ VALUES (enreg.pt_id, enreg.pt_nature, ARRAY[counter1,counter2,counter3,counter4], enreg.geom);
 
                                 End If;
 
@@ -1475,55 +1476,55 @@ class BoiteDimensioning:
                 DROP TABLE IF EXISTS temp.erreurs_chambres_""" + zs_refpm.split("_")[2].lower() + """;
                 CREATE TABLE temp.erreurs_chambres_""" + zs_refpm.split("_")[2].lower() + """ (chambre integer primary key, naturechb varchar, nbebp integer[], geom geometry(Point,2154));
                 CREATE INDEX ON public.erreurs_chambres USING GIST(geom);
-                perform temp.occupation_chambres('L1T',2,0,0,0,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('A2',3,2,1,0,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('A1',3,2,1,0,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('A3',3,2,1,0,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('L2T',3,2,1,0,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('L2C',3,2,1,0,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('L3T',4,3,1,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('L3C',4,3,1,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('A4',4,4,2,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D1',4,4,2,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D1C',4,4,2,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D1T',4,4,2,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('L4T',4,4,2,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('B1',4,4,3,2,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('L5T',4,4,3,2,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('B2',4,4,4,3,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('L6T',4,4,4,3,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('M1C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('M2T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D2',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D2C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D2T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('M3C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('K1C',4,4,1,0,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('K2C',4,4,2,1,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('K3C',4,4,4,2,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('C1',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D3',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D3C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D3T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P1C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P1T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('C2',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D4',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D4C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('D4T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P2C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('E1',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P3C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('C3',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P4C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P4T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('E2',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('E3',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P5C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P5T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('E4',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P6C',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
-                perform temp.occupation_chambres('P6T',4,4,4,4,'""" + zs_refpm.split("_")[2].lower() + """');
+                perform temp.occupation_chambres('L1T',2,0,0,0,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('A2',3,2,1,0,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('A1',3,2,1,0,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('A3',3,2,1,0,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('L2T',3,2,1,0,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('L2C',3,2,1,0,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('L3T',4,3,1,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('L3C',4,3,1,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('A4',4,4,2,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D1',4,4,2,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D1C',4,4,2,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D1T',4,4,2,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('L4T',4,4,2,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('B1',4,4,3,2,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('L5T',4,4,3,2,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('B2',4,4,4,3,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('L6T',4,4,4,3,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('M1C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('M2T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D2',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D2C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D2T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('M3C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('K1C',4,4,1,0,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('K2C',4,4,2,1,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('K3C',4,4,4,2,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('C1',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D3',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D3C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D3T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P1C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P1T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('C2',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D4',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D4C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('D4T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P2C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('E1',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P3C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('C3',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P4C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P4T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('E2',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('E3',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P5C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P5T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('E4',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P6C',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
+                perform temp.occupation_chambres('P6T',4,4,4,4,'""" + zs_refpm.split("_")[2] + """');
                 END;
                 $$ language plpgsql;
 
@@ -1540,3 +1541,22 @@ class BoiteDimensioning:
             self.add_pg_layer("temp", "erreurs_chambres_" + zs_refpm.split("_")[2].lower())
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+
+
+    def update_p_ebp(self):
+        self.fenetreMessage(QMessageBox, "info", "within update ebp")
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
+
+        query = """UPDATE prod.p_ebp as ebp1 SET bp_model = ebp2.bp_model
+                FROM temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ as ebp2
+                WHERE ebp1.bp_id = ebp2.bp_id;
+
+        """
+
+        try:
+            self.executerRequette(query, False)
+        except Exception as e:
+            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+
+        self.fenetreMessage(QMessageBox, "info", "The table prod.p_ebp is updated")
