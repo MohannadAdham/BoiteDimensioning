@@ -1147,7 +1147,10 @@ class BoiteDimensioning:
         query = """DROP TABLE IF EXISTS temp.ebp_""" + zs_refpm.split("_")[2].lower() + """;
                 CREATE TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS SELECT * FROM prod.p_ebp
                 WHERE bp_zs_code = '""" + zs_refpm.split("_")[2] + """';
-                
+
+                CREATE INDEX ON temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ USING GIST(geom);
+                ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD PRIMARY KEY (bp_id);
+
 
                 ALTER TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ ADD COLUMN capa_amnt_fo_util INT, ADD COLUMN zp_reserve INT DEFAULT 0, ADD COLUMN nb_epissures INT,
                 ADD COLUMN nb_cassettes_epissure INT DEFAULT 0, ADD COLUMN nb_cassettes_reserve INT DEFAULT 0, ADD COLUMN nb_cassettes_max INT DEFAULT 999, ADD COLUMN nb_cassettes_total INT DEFAULT 0;
