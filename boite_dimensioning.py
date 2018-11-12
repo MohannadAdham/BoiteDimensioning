@@ -1169,13 +1169,14 @@ class BoiteDimensioning:
 
     def cb_code_to_fo_util(self, zs_refpm):
         query = """UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ SET capa_fo_util = case
-                WHEN cb_code in (1, 12, 19) THEN 12
-                WHEN cb_code in (2, 13, 20) THEN 24
-                WHEN cb_code in (3, 14, 21) THEN 48
-                WHEN cb_code in (4, 15, 22) THEN 72
-                WHEN cb_code in (5, 16, 23) THEN 96
-                WHEN cb_code in (6, 17, 24) THEN 144
-                WHEN cb_code in (7, 18, 25) THEN 288
+                WHEN cb_code in (1, 12, 19, 27) THEN 12
+                WHEN cb_code in (2, 13, 20, 28) THEN 24
+                WHEN cb_code in (29) THEN 36
+                WHEN cb_code in (3, 14, 21, 30) THEN 48
+                WHEN cb_code in (4, 15, 22, 31) THEN 72
+                WHEN cb_code in (5, 16, 23, 32) THEN 96
+                WHEN cb_code in (6, 17, 24, 33) THEN 144
+                WHEN cb_code in (7, 18, 25, 34) THEN 288
                 WHEN cb_code in (8) THEN 432
                 WHEN cb_code in (9) THEN 576
                 WHEN cb_code in (10) THEN 720
