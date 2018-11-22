@@ -40,6 +40,8 @@ import processing
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from qgis.core import *
+from qgis.gui import QgsMessageBar
+
 # Initialize Qt resources from file resources.py
 import resources
 # Import the code for the dialog
@@ -89,6 +91,12 @@ class BoiteDimensioning:
         # Create the dialog (after translation) and keep reference
         self.dlg = BoiteDimensioningDialog()
 
+        # Define the levels of a message bar
+        self.info = QgsMessageBar.INFO 
+        self.critical = QgsMessageBar.CRITICAL
+        self.warning = QgsMessageBar.WARNING
+        self.success = QgsMessageBar.SUCCESS
+
 
 #"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""" lsitner autojmatic dimensioning """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
         
@@ -125,7 +133,6 @@ class BoiteDimensioning:
         # Connect the button "pushButton_mettre_a_jour_ebp"
         Button_mettre_a_jour_ebp = self.dlg.findChild(QPushButton, "pushButton_mettre_a_jour_ebp")
         QObject.connect(Button_mettre_a_jour_ebp, SIGNAL("clicked()"), self.update_p_ebp)
-
 
 
 
@@ -232,6 +239,10 @@ class BoiteDimensioning:
             msg.exec_()
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage",str(e))
+
+
+    def sendMessageBar(self, msgType, title, message, timeDur=4):
+        self.iface.messageBar().pushMessage(title, message, level=msgType, duration=timeDur)        
 
 
 
@@ -357,7 +368,7 @@ class BoiteDimensioning:
                 self.dlg.findChild(QComboBox, "comboBox_ptech").setEnabled(True)
                 self.dlg.findChild(QComboBox, "comboBox_zs_refpm").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verification").setEnabled(True)
-                self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)
+                # self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_verifier_orientation").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_fibres_utiles").setEnabled(True)
                 self.dlg.findChild(QPushButton, "pushButton_dimensions").setEnabled(True)
@@ -391,6 +402,7 @@ class BoiteDimensioning:
 
 
                 print "Schema found"
+                self.sendMessageBar(self.success, "Success", "Connected successfuly to the database", 2)
                 # self.dlg2.findChild(QPushButton,"pushButton_controle_avt_migration").setEnabled(True)
             else:
                 # self.dlg2.findChild(QPushButton,"pushButton_controle_avt_migration").setEnabled(False)
@@ -405,7 +417,8 @@ class BoiteDimensioning:
         # zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
-        self.fenetreMessage(QMessageBox, "Success", "verifications will be performed")
+        # self.fenetreMessage(QMessageBox, "Success", "verifications will be performed")
+        # self.sendMessageBar(self.success, "Success", "verifications will be performed", 2)
 
         query_verify = """
         -- verifications for t_noeud
@@ -578,8 +591,6 @@ class BoiteDimensioning:
         """
 
 
-        self.fenetreMessage(QMessageBox, "info", "verification will be executed")
-
         try:
             self.executerRequette(query_verify, False)
         except Exception as e:
@@ -587,7 +598,9 @@ class BoiteDimensioning:
 
 
 
-        self.fenetreMessage(QMessageBox, "Success", "verification is done!")
+        # self.fenetreMessage(QMessageBox, "Success", "verification is done!")
+        self.sendMessageBar(self.success, "Success", "verification is done!", 2)
+
 
         # try:
         #     self.add_pg_layer("prod", "cm_continuite_" + zs_refpm.split("_")[2].lower())
@@ -627,7 +640,9 @@ class BoiteDimensioning:
                 pass
 
             elif len(result) >= 1:
-                self.fenetreMessage(QMessageBox.Warning,"Warning", "Consultz la table : " + table_name + '_' + zs_refpm.split("_")[2].lower())
+                # self.fenetreMessage(QMessageBox.Warning,"Warning", "Consultz la table : " + table_name + '_' + zs_refpm.split("_")[2].lower())
+                self.sendMessageBar(self.info, "Info", 'Consultz la table : <b style="color:#007E33;">' + table_name + '_' + zs_refpm.split("_")[2].lower() + "</b>", 1.5)
+
 
 
 
@@ -635,7 +650,6 @@ class BoiteDimensioning:
 
     def add_style(self, layer):
         from random import randrange
-        # self.fenetreMessage(QMessageBox, 'info', 'within add style for layer ' + layer.name())
 
         # Get the active layer (must be a vector layer)
         # layer = qgis.utils.iface.activeLayer()
@@ -715,34 +729,26 @@ class BoiteDimensioning:
 
         vlayer = QgsVectorLayer(uri.uri(False), table_name, "postgres")
 
-        # if not vlayer.isValid():
-        #     self.fenetreMessage(QMessageBox, "Error", "The layer %s is not valid" % vlayer.name())
-        #     return
-
 
         # check first if the layer is already added to the map
         layer_names = [layer.name() for layer in QgsMapLayerRegistry.instance().mapLayers().values()]
         if table_name not in layer_names:
             # Add the vector layer to the map
             QgsMapLayerRegistry.instance().addMapLayers([vlayer])
-            self.fenetreMessage(QMessageBox, "Success", "Layer %s is loaded" % vlayer.name())
+            self.sendMessageBar(self.info, "Info", 'Layer <b style="color:#007E33;"> %s </b> is loaded' % vlayer.name(), 2)
 
         else :
-            self.fenetreMessage(QMessageBox, "Success", "Layer %s already exists but it has been updated" % vlayer.name())
+            self.sendMessageBar(self.info, "Info", 'Layer <b style="color:#007E33;"> %s </b> already exists but it has been updated' % vlayer.name(), 2)
 
 
 
 
     def calcul_orientation_cable(self):
 
-        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
-
-        
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()      
 
 
         # self.create_cable_cluster(zs_refpm)
-
-
         # query to update the cables' geometry. The objective is to inhance the orientation of the cables, but we still need to verify that in the next step
 
         query_orientation = """
@@ -761,16 +767,13 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query_orientation, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
-
-        
 
 
 
     def create_cable_cluster(self, zs_refpm):
 
-        self.fenetreMessage(QMessageBox, "info", "within create_cable_cluster")
 
         query_cluster = """
 
@@ -911,11 +914,10 @@ class BoiteDimensioning:
 
         try:
             self.executerRequette(query_cluster, False)
-            self.fenetreMessage(QMessageBox, "info", "The table cb_cluster is created")
-
+            # self.fenetreMessage(QMessageBox, "info", "The table cb_cluster is created")
 
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
 
@@ -947,10 +949,14 @@ class BoiteDimensioning:
 
         self.add_pg_layer("temp", "controle_ebp_pour_orientation_" +  zs_refpm.split("_")[2].lower())
 
+        self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)
+
+
+
 
 
     def create_temp_cable_table(self, zs_refpm):
-        self.fenetreMessage(QMessageBox, "info", "within create_temp_cable_table")
+        # self.fenetreMessage(QMessageBox, "info", "within create_temp_cable_table")
 
         query = """ DROP TABLE IF EXISTS temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """;
                 CREATE TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ 
@@ -968,7 +974,7 @@ class BoiteDimensioning:
             self.executerRequette(query, False)
 
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Erreur_fenetreMessage", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
     def calcul_fibres_utiles(self):
@@ -1100,7 +1106,6 @@ class BoiteDimensioning:
 
 
         """
-        self.fenetreMessage(QMessageBox, "INFO", query)
         self.executerRequette(query, False)
 
         self.find_passage(zs_refpm)
@@ -1118,25 +1123,20 @@ class BoiteDimensioning:
 
         try:
             self.executerRequette(query, False)
-
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
 
     def calcul_boite_dimensions(self):
 
-        self.fenetreMessage(QMessageBox, "INFO", "Within calcul_boite_dimensions")
-
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
-
         self.create_temp_boite_table(zs_refpm)
         self.calcul_nb_cassettes_max(zs_refpm)
         self.calcul_nb_epissures(zs_refpm)
         self.calcul_nb_cassettes_max(zs_refpm)
         self.calcul_nb_cassettes(zs_refpm)
         self.calcul_type_boite(zs_refpm)
-
         self.add_pg_layer("temp", "ebp_" + zs_refpm.split("_")[2].lower())
 
 
@@ -1159,11 +1159,12 @@ class BoiteDimensioning:
 
         try:
             self.executerRequette(query, False)
+            self.sendMessageBar(self.info, "Info", "The table temp.ebp_"  + zs_refpm.split("_")[2] + " is created", 2)
 
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
-        self.fenetreMessage(QMessageBox, "INFO", "The table temp.ebp_"  + zs_refpm.split("_")[2] + " is created")
+
 
 
 
@@ -1187,7 +1188,7 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
     def calcul_nb_epissures(self, zs_refpm):
@@ -1207,7 +1208,8 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query1, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
+
 
 
 
@@ -1288,9 +1290,9 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query2, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
-        self.fenetreMessage(QMessageBox, "info", "The query is executed")
+        # self.fenetreMessage(QMessageBox, "info", "The query is executed")
         
 
 
@@ -1328,7 +1330,7 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
 
@@ -1350,7 +1352,7 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
 
@@ -1375,7 +1377,7 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
     def calcul_type_boite(self, zs_refpm):
@@ -1401,14 +1403,14 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
 
 
     def verify_capacite_chambre(self):
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
-        self.fenetreMessage(QMessageBox, "info", "within verify_capacite_chambre")
+        # self.fenetreMessage(QMessageBox, "info", "within verify_capacite_chambre")
 
         define_function = """CREATE OR REPLACE FUNCTION temp.occupation_chambres(varchar, integer, integer, integer, integer, varchar)
                           RETURNS void AS
@@ -1471,7 +1473,7 @@ class BoiteDimensioning:
         try:
             self.executerRequette(define_function, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
         query = """ DO
@@ -1539,17 +1541,17 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
         try:
             self.add_pg_layer("temp", "erreurs_chambres_" + zs_refpm.split("_")[2].lower())
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
 
     def update_p_ebp(self):
-        self.fenetreMessage(QMessageBox, "info", "within update ebp")
+        # self.fenetreMessage(QMessageBox, "info", "within update ebp")
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
         query = """UPDATE prod.p_ebp as ebp1 SET bp_model = ebp2.bp_model
@@ -1561,6 +1563,7 @@ class BoiteDimensioning:
         try:
             self.executerRequette(query, False)
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning, "Error", str(e))
+            self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
-        self.fenetreMessage(QMessageBox, "info", "The table prod.p_ebp is updated")
+        # self.fenetreMessage(QMessageBox, "info", "The table prod.p_ebp is updated")
+        self.sendMessageBar(self.info, "Info", "The table prod.p_ebp is updated", 3)
