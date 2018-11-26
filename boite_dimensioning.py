@@ -230,6 +230,12 @@ class BoiteDimensioning:
 
 
     def fenetreMessage(self,typeMessage,titre,message):
+        """ Display a message box to the user
+            titre : the title of the message
+            message : the body of the message
+
+        """
+
         try:
             msg = QMessageBox()
             # msg.setIcon(typeMessage)
@@ -242,11 +248,15 @@ class BoiteDimensioning:
 
 
     def sendMessageBar(self, msgType, title, message, timeDur=4):
+        """ Display a message to the user in the message bar at the top of the map canvas """
+
         self.iface.messageBar().pushMessage(title, message, level=msgType, duration=timeDur)        
 
 
 
     def GetParamBD(self, dbname, password, user, serveur, sche):
+        ''' Looks for the information to connect to the DB within the QGIS project '''
+
         try:
             path_absolute = QgsProject.instance().fileName()
             
@@ -291,11 +301,11 @@ class BoiteDimensioning:
                             # sche.setText(schema[0].replace('"',''))
                             sche.setText("gracethd")
         except Exception as e:
-            self.fenetreMessage(QMessageBox.Warning,"Erreur_GetParamBD",str(e))
-            # print str(e)
+            self.fenetreMessage(QMessageBox.Warning,"Erreur_GetParamBD", str(e))
 
 
     def remplir_menu_deroulant_reference(self, combobox, rq_sql, DefValChamp):
+        ''' Fill a combobox with a list of table names '''
         listVal = []
         combobox.clear()
         result = self.executerRequette(rq_sql, True)
@@ -311,6 +321,8 @@ class BoiteDimensioning:
 
 
     def executerRequette(self, Requette, boool):
+        ''' Sends a query to execute it within the database and receives the results '''
+
         global conn
         try:
             cursor = conn.cursor()
@@ -335,6 +347,8 @@ class BoiteDimensioning:
 
 
     def connectToDb(self):
+        ''' Connects to the DB, enables the comboboxes and the buttons, and fill the comboboxes with the names of the tables '''
+
         global conn
         Host = self.dlg.lineEdit_Host.text()
         DBname = self.dlg.lineEdit_BD.text()
@@ -405,8 +419,7 @@ class BoiteDimensioning:
                 self.sendMessageBar(self.success, "Success", "Connected successfuly to the database", 2)
                 # self.dlg2.findChild(QPushButton,"pushButton_controle_avt_migration").setEnabled(True)
             else:
-                # self.dlg2.findChild(QPushButton,"pushButton_controle_avt_migration").setEnabled(False)
-                # self.dlg2.findChild(QPushButton,"pushButton_migration").setEnabled(False)
+
                 print "Schema not found"
         except Exception as e:
                 pass
@@ -414,11 +427,50 @@ class BoiteDimensioning:
 
 
     def verify(self):
-        # zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
-        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
+        """ Performs a set of verifications necessary for the dimensioning of the boites.
+        The verifications are the following:
+            A. verifications for t_noeud
+                1. Doublon géométrie noeud
+                2. BAL hors d'une ZPBO
+                3. BAL non raccordée à un câble de raccordement
+                4. Pavillon (bal entre 1 et 3) dont le nombre de suf est différent du nombre de raccordements
+                5. Immeuble (BAL >= 4) dont le nombre de câbles = 0 ou > 1
+                6. BAL hors ZSRO
 
-        # self.fenetreMessage(QMessageBox, "Success", "verifications will be performed")
-        # self.sendMessageBar(self.success, "Success", "verifications will be performed", 2)
+            B. verifications for p_sitetech
+                1. Site technique non raccordé à un cable
+                2. Doublon géométrie site technique
+
+            C. verifications for p_ebp
+                1. Boite non associée à un point technique
+                2. Boite sans câble raccordé (boite apparaissant dans t_ebp mais pas dans t_cable cb_bp1,cb_bp2)
+                3. PBO sans ZPBO
+                4. PBO avec cable de capacité superieure ou égale à 288 FO
+                5. Doublon géométrie boite
+                6. BPE dans zpbo
+
+            D. verifications for zpbo
+                1. ZPBO sans boitier PBO
+                2. Doublon de géométrie ZPBO
+                3. ZPBO contenant plus d une BAL dont un immeuble
+                4. ZPBO contenant une BPE
+                5. ZPBO qui a plus d'une boite
+
+            E. verifications for p_cable
+                1. Câble avec une capacité invalide
+                2. Câble avec capa_fo supérieure ou égale à 288 raccordé sur PBO
+                3. Câble sans site technique ou boite en extrémité (vérification géométrique)
+                4. Doublons géométrie câble (sans les câbles de racco)
+                5. Raccordement sur BPE (vérification attributaire)
+                6. Géométrie non valide du câble
+                7. Raccordement qui ne part pas d'une boîte ou qui n'arrive pas sur un noeud
+                8. Raccordement sur BPE (vérification géométrique)
+                9. Raccordement connecté à une mauvaise boîte
+                10. Raccordement dont le type logique n'est pas raccordement
+
+        """
+
+        zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
         query_verify = """
         -- verifications for t_noeud
@@ -543,6 +595,7 @@ class BoiteDimensioning:
 
         -- verifications for p_cable
 
+
         DROP TABLE IF EXISTS temp.controle_cable_""" +  zs_refpm.split("_")[2] + """;
         CREATE TABLE temp.controle_cable_""" +  zs_refpm.split("_")[2] + """ AS
         SELECT row_number() over () id, *
@@ -590,24 +643,14 @@ class BoiteDimensioning:
 
         """
 
-
         try:
             self.executerRequette(query_verify, False)
         except Exception as e:
             self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
 
-
-
-        # self.fenetreMessage(QMessageBox, "Success", "verification is done!")
         self.sendMessageBar(self.success, "Success", "verification is done!", 2)
 
-
-        # try:
-        #     self.add_pg_layer("prod", "cm_continuite_" + zs_refpm.split("_")[2].lower())
-        # except Exception as e:
-        #     self.fenetreMessage(QMessageBox.Warning,"Erreur_fenetreMessage", str(e))
-
-
+        # Add the control views as layers to the project
         try:
             self.add_pg_layer("temp", "controle_noeud_" +  zs_refpm.split("_")[2].lower())
             self.add_pg_layer("temp", "controle_sitetech_" +  zs_refpm.split("_")[2].lower())
@@ -649,10 +692,9 @@ class BoiteDimensioning:
 
 
     def add_style(self, layer):
-        from random import randrange
+        """ Style a qgis layer by classifying the features using the 'intitule' field and giving the classes random colors """
 
-        # Get the active layer (must be a vector layer)
-        # layer = qgis.utils.iface.activeLayer()
+        from random import randrange
 
         # get unique values 
         fni = layer.fieldNameIndex('intitule')
@@ -668,22 +710,21 @@ class BoiteDimensioning:
             layer_style = {}
             layer_style['color'] = '%d, %d, %d' % (randrange(0,256), randrange(0,256), randrange(0,256))
 
+            # Define the style of the point layers
             if layer.wkbType()==QGis.WKBPoint:
-                # print 'Layer is a pojnt layer'
                 layer_style['color'] = '%d, %d, %d' % (randrange(0,256), randrange(0,256), randrange(0,256))
                 layer_style['size'] = '2'
                 symbol_layer = QgsSimpleMarkerSymbolLayerV2.create(layer_style)
                 symbol_layer.setOutlineWidth(0)
 
-
+            # Define the style of the lineString layers
             if layer.wkbType()==QGis.WKBLineString:
                 # print 'Layer is a line layer'
                 layer_style['width_border'] = '0.46'
                 layer_style['size'] = '0.46'
-                # layer_style['color_border'] = 'red'
                 symbol_layer = QgsSimpleFillSymbolLayerV2.create(layer_style)
 
-
+            # Define the style of the polyon layers
             if layer.wkbType()==QGis.WKBPolygon or layer.wkbType()==QGis.WKBMultiPolygon:
                 # print 'Layer is a polygon layer'
                 layer_style['width_border'] = '0.46'
@@ -717,6 +758,8 @@ class BoiteDimensioning:
 
 
     def add_pg_layer(self, schema, table_name):
+        ''' Adds a postgres geometry table as a layer to the QGIS project'''
+
         # Create a data source URI
         uri = QgsDataSourceURI()
 
@@ -724,13 +767,12 @@ class BoiteDimensioning:
         uri.setConnection(self.dlg.lineEdit_Host.text(), "5432", self.dlg.lineEdit_BD.text(), self.dlg.lineEdit_User.text(), self.dlg.lineEdit_Password.text())
 
         # set database schema, table name, geometry column and optionally subset (WHERE clause)
-        # uri.setDataSource('temp', 'cheminement_al01', "geom")
         uri.setDataSource(schema, table_name, "geom")
 
         vlayer = QgsVectorLayer(uri.uri(False), table_name, "postgres")
 
 
-        # check first if the layer is already added to the map
+        # Check first if the layer is already added to the map
         layer_names = [layer.name() for layer in QgsMapLayerRegistry.instance().mapLayers().values()]
         if table_name not in layer_names:
             # Add the vector layer to the map
@@ -744,6 +786,8 @@ class BoiteDimensioning:
 
 
     def calcul_orientation_cable(self):
+        ''' Determines the orientation of the cables within the table p_cable. Should not be used unless
+        we had many errors when testing the orientation using "verify_orientation_cable()" '''
 
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()      
 
@@ -923,6 +967,7 @@ class BoiteDimensioning:
 
 
     def verify_orientation_cable(self):
+        """ Look for errors that indicate problems with the orientation of the cables within p_cable """
 
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
@@ -947,8 +992,10 @@ class BoiteDimensioning:
 
         self.executerRequette(query, False)
 
+        # Add the table that contains the errors to the map canvas to be examined by the user
         self.add_pg_layer("temp", "controle_ebp_pour_orientation_" +  zs_refpm.split("_")[2].lower())
 
+        # Enable the button of the orientation of the cables in case the user found many errors during the verification step
         self.dlg.findChild(QPushButton, "pushButton_orientation").setEnabled(True)
 
 
@@ -956,8 +1003,9 @@ class BoiteDimensioning:
 
 
     def create_temp_cable_table(self, zs_refpm):
-        # self.fenetreMessage(QMessageBox, "info", "within create_temp_cable_table")
-
+        ''' Create a copy of prod.p_cable to use it for the calcualtions
+            zs_refpm : an identifyer for the zones SRO selected by the user
+         '''
         query = """ DROP TABLE IF EXISTS temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """;
                 CREATE TABLE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ 
                 as (SELECT cable.* FROM prod.p_cable as cable JOIN prod.p_ltech ON cb_lt_code = lt_id JOIN prod.p_zsro ON lt_id = zs_lt_code 
@@ -972,17 +1020,19 @@ class BoiteDimensioning:
 
         try:
             self.executerRequette(query, False)
-
         except Exception as e:
             self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
 
     def calcul_fibres_utiles(self):
+        ''' Calculate the number of fibers per cable and save the results in the working table cable_pour_boite_* 
+        (*) : is the quadrigram of the selected zone ZSRO '''
+
 
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()        
         self.create_temp_cable_table(zs_refpm)
         
-        # create cable cluster to use it in the calculation of fb_util
+        # Create cable cluster to use it in the calculation of fb_util
         try:
             self.create_cable_cluster(zs_refpm)
 
@@ -992,7 +1042,7 @@ class BoiteDimensioning:
 
         self.add_pg_layer("temp", "cb_cluster_" + zs_refpm.split("_")[2].lower())
 
-        # create the query that calculate fb_util
+        # Create the query that calculates fb_util
         
         query = """
                 DO
@@ -1115,6 +1165,7 @@ class BoiteDimensioning:
 
 
     def find_passage(self, zs_refpm):
+        ''' Determin if the cable is of type "passage" based on the etiquets of the cables '''
 
         query = """
         UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2] + """ SET passage = true
@@ -1129,6 +1180,7 @@ class BoiteDimensioning:
 
 
     def calcul_boite_dimensions(self):
+        ''' Execute all the steps necessary to calculate the dimensions (types and zises) of the boites optiques '''
 
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
         self.create_temp_boite_table(zs_refpm)
@@ -1143,6 +1195,7 @@ class BoiteDimensioning:
 
 
     def create_temp_boite_table(self, zs_refpm):
+        ''' Make a working copy of the table p_ebp to use it for the calcualtions'''
 
         query = """DROP TABLE IF EXISTS temp.ebp_""" + zs_refpm.split("_")[2].lower() + """;
                 CREATE TABLE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS SELECT * FROM prod.p_ebp
@@ -1169,6 +1222,7 @@ class BoiteDimensioning:
 
 
     def cb_code_to_fo_util(self, zs_refpm):
+        ''' Calculate the number of fibres utiles (fo_util) per cable based on the type (cb_code) of the cable '''
         query = """UPDATE temp.cable_pour_boite_""" + zs_refpm.split("_")[2].lower() + """ SET capa_fo_util = case
                 WHEN cb_code in (1, 12, 19, 27) THEN 12
                 WHEN cb_code in (2, 13, 20, 28) THEN 24
@@ -1192,6 +1246,7 @@ class BoiteDimensioning:
 
 
     def calcul_nb_epissures(self, zs_refpm):
+        ''' Calculate the number of "epissures" per boite '''
 
         self.create_intermediate_table(zs_refpm)
 
@@ -1202,9 +1257,6 @@ class BoiteDimensioning:
                 WHERE ebp.bp_id = zpbo.zp_bp_code;
 
         """
-
-
-
         try:
             self.executerRequette(query1, False)
         except Exception as e:
@@ -1336,6 +1388,7 @@ class BoiteDimensioning:
 
 
     def calcul_nb_cassettes_max(self, zs_refpm):
+        ''' Calcualte the maximum possible number of fibers for the specified boite '''
 
         query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
                 nb_cassettes_max = CASE
@@ -1358,6 +1411,7 @@ class BoiteDimensioning:
 
 
     def calcul_nb_cassettes(self, zs_refpm):
+        ''' Calculate the number of cassettes (epissure, reserve, and total) per boite '''
 
         query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
                 nb_cassettes_epissure = ceiling(ebp.nb_epissures / 12.0), nb_cassettes_reserve = ceiling((capa_amnt_fo_util / 12.0) * 0.3);
@@ -1381,6 +1435,7 @@ class BoiteDimensioning:
 
 
     def calcul_type_boite(self, zs_refpm):
+        ''' Determine the type (bp_model) of the boite based on the total number of cassettes (nb_cassettes_total) and the type of the point technique (bp_pttype) '''
 
         query = """UPDATE temp.ebp_""" + zs_refpm.split("_")[2].lower() + """ AS ebp SET
                 bp_model = 8;
@@ -1409,8 +1464,10 @@ class BoiteDimensioning:
 
 
     def verify_capacite_chambre(self):
+        ''' Compare the type of each chamber with the types of the boites within it to determine if the chambre can be occupied by boites of these types or not.
+        Create a temporary table to hold the errors and add it to the project. '''
+
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
-        # self.fenetreMessage(QMessageBox, "info", "within verify_capacite_chambre")
 
         define_function = """CREATE OR REPLACE FUNCTION temp.occupation_chambres(varchar, integer, integer, integer, integer, varchar)
                           RETURNS void AS
@@ -1551,7 +1608,8 @@ class BoiteDimensioning:
 
 
     def update_p_ebp(self):
-        # self.fenetreMessage(QMessageBox, "info", "within update ebp")
+        ''' Update the table prod.p_ebp with the information from the working table temp.ebp_* '''
+
         zs_refpm = self.dlg.comboBox_zs_refpm.currentText()
 
         query = """UPDATE prod.p_ebp as ebp1 SET bp_model = ebp2.bp_model
@@ -1565,5 +1623,4 @@ class BoiteDimensioning:
         except Exception as e:
             self.sendMessageBar(self.critical, "Erreur", str(e), 4)
 
-        # self.fenetreMessage(QMessageBox, "info", "The table prod.p_ebp is updated")
         self.sendMessageBar(self.info, "Info", "The table prod.p_ebp is updated", 3)
